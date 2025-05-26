@@ -1,0 +1,8 @@
+PyYAML>=6.0
+langchain>=0.1.0
+scikit-learn>=1.0
+numpy>=1.20
+pandas
+openai>=1.0 # For LLM API calls
+# tiktoken is often a dependency for langchain text splitting, good to have
+tiktoken>=0.5.0

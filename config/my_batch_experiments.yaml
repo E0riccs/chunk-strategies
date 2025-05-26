@@ -1,0 +1,9 @@
+experiments:
+  - file_type: chapter_text
+    chunking_strategy: simple_chunk_100_overlap_0
+  - file_type: chapter_text
+    chunking_strategy: recursive_char_split_150_overlap_15
+  - file_type: itemized_text
+    chunking_strategy: simple_chunk_200_overlap_20
+  - file_type: short_plain_text
+    chunking_strategy: simple_chunk_100_overlap_0
