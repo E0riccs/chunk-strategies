@@ -25,6 +25,8 @@ class ExperimentRunner:
             os.makedirs(self.results_dir)
             print(f"Created results directory: {self.results_dir}")
 
+        self.experiments_config = None
+
         self.all_results_data = []
 
     def _abs_path(self, relative_path):
@@ -100,14 +102,14 @@ class ExperimentRunner:
     def run_all_experiments_from_config(self, experiments_config_path='config/experiments_to_run.yaml'):
         """Runs all experiments defined in a configuration file."""
         abs_experiments_config_path = self._abs_path(experiments_config_path)
-        experiments_config = load_yaml_config(abs_experiments_config_path)
+        self.experiments_config = load_yaml_config(abs_experiments_config_path)
         
-        if not experiments_config or 'experiments' not in experiments_config:
+        if not self.experiments_config or 'experiments' not in self.experiments_config:
             print(f"Error: Experiments configuration file not found or invalid at {abs_experiments_config_path}")
             return
 
         print(f"\n=== Starting Batch of Experiments from {abs_experiments_config_path} ===")
-        for exp_setting in experiments_config.get('experiments', []):
+        for exp_setting in self.experiments_config.get('experiments', []):
             file_type = exp_setting.get('file_type')
             strategy = exp_setting.get('chunking_strategy')
             if file_type and strategy:
@@ -125,14 +127,8 @@ class ExperimentRunner:
             return
 
         df = pd.DataFrame(self.all_results_data)
-        # Reorder columns for better readability if desired
-        cols_order = [
-            'timestamp', 'file_type_name', 'chunking_strategy_name', 
-            'total_processing_time_seconds', 'llm_evaluation_score_1_to_5', 
-            'avg_cosine_similarity_chunks_vs_original', 'number_of_chunks',
-            'chunking_method', 'chunking_params', 'file_type_description', 
-            'test_file_path', 'chunks_output_file', 'evaluation_module_runtime_seconds'
-        ]
+        
+        cols_order = self.experiments_config.get('results', {}).get('columns_order', [])
         # Ensure all expected columns are present, add if missing (e.g. if an eval step failed)
         for col in cols_order:
             if col not in df.columns:

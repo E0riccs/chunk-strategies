@@ -11,18 +11,6 @@ DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
 def main():
     parser = argparse.ArgumentParser(description="Run text chunking experiments.")
 
-    # 手动指定单一测试项目
-    parser.add_argument(
-        '--file_type',
-        type=str,
-        help='Specific file type name to process (must be defined in config/file_types.yaml).'
-    )
-    parser.add_argument(
-        '--strategy',
-        type=str,
-        help='Specific chunking strategy name to use (must be defined in config/chunking_strategies.yaml).'
-    )
-
     # 全部测试项目
     parser.add_argument(
         '--run_all_from_config',
@@ -62,14 +50,8 @@ def main():
     if args.run_all_from_config:
         print(f"Running all experiments from config file: {args.run_all_from_config}")
         runner.run_all_experiments_from_config(experiments_config_path=args.run_all_from_config)
-    elif args.file_type and args.strategy:
-        print(f"Running single experiment: File Type='{args.file_type}', Strategy='{args.strategy}'")
-        runner.run_experiment(file_type_name=args.file_type, chunking_strategy_name=args.strategy)
-        runner.save_all_results_summary() # Save summary even for a single run
     else:
-        # 未指定测试项目，使用默认测试项（若无则创建）
         print("No specific experiment requested. Creating a default 'experiments_to_run.yaml' and running it.")
-        print("Use --file_type and --strategy for a single run, or --run_all_from_config for batch runs.")
         
         # Create a default experiments_to_run.yaml if it doesn't exist and run it
         # This makes it easier for the user to get started if they run main.py without args
