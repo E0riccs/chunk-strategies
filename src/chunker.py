@@ -1,5 +1,5 @@
 from src.utils import load_yaml_config
-from langchain.text_splitter import RecursiveCharacterTextSplitter, CharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter
 import os
 
 ok_method_name = ['simple_split', 'recursive_character_text_splitter']
@@ -8,11 +8,12 @@ class SpliterFactory:
     def _simple_split(self, text, chunk_size, chunk_overlap):
         """A basic character-based splitter."""
         splitter = CharacterTextSplitter(
-            separator = "\n\n", # Default, can be parameterized if needed
+            separator="\n", # 次要分割依据
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            keep_separator=True,
             length_function=len,
-            is_separator_regex=False,
+            is_separator_regex=False, # 分割符是否是正则表达式
         )
         return splitter.split_text(text)
 

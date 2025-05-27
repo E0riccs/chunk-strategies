@@ -4,11 +4,11 @@ chunking_strategies:
     params:
       chunk_size: 100
       chunk_overlap: 10
-  - name: simple_chunk_200_overlap_20
+  - name: simple_chunk_1
     method: simple_split
     params:
-      chunk_size: 200
-      chunk_overlap: 20
+      chunk_size: 1000
+      chunk_overlap: 200
   - name: recursive_char_split_150_overlap_15
     method: recursive_character_text_splitter
     params:
