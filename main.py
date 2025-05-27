@@ -51,7 +51,7 @@ def main():
         print(f"Running all experiments from config file: {args.run_all_from_config}")
         runner.run_all_experiments_from_config(experiments_config_path=args.run_all_from_config)
     else:
-        print("No specific experiment requested. Creating a default 'experiments_to_run.yaml' and running it.")
+        print("No specific experiment requested. Using/Creating a default 'experiments_to_run.yaml' and running it.")
         
         # Create a default experiments_to_run.yaml if it doesn't exist and run it
         # This makes it easier for the user to get started if they run main.py without args
@@ -60,7 +60,7 @@ def main():
         if not os.path.exists(abs_default_config_path):
             example_experiments_config = {
                 'experiments': [
-                    {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_0'},
+                    {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_10'},
                     {'file_type': 'itemized_text', 'chunking_strategy': 'recursive_char_split_150_overlap_15'},
                 ],
                 'results': {
@@ -90,7 +90,6 @@ def main():
         runner.run_all_experiments_from_config(experiments_config_path=DEFAULT_EXPERIMENTS_CONFIG_PATH)
 
     print("\nMain script execution finished.")
-    print(f"Check the '{os.path.abspath(args.results_dir)}' directory for output files.")
 
 if __name__ == "__main__":
     main()
