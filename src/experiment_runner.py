@@ -80,7 +80,7 @@ class ExperimentRunner:
 
         # Save chunked output
         chunks_filename = f"{safe_file_type_name}_{safe_strategy_name}_{timestamp}_chunks.txt"
-        chunks_filepath = os.path.join(self.results_dir, chunks_filename)
+        chunks_filepath = os.path.join(self.results_dir, 'chunks', chunks_filename)
         save_text_to_file("\n\n---\n\n".join(chunks), chunks_filepath)
 
         # Prepare data for overall results table
@@ -135,7 +135,7 @@ class ExperimentRunner:
                 df[col] = None # or np.nan
         df = df[cols_order]
 
-        summary_filename = f"experiment_summary_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        summary_filename = f"summary/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         summary_filepath = os.path.join(self.results_dir, summary_filename)
         
         try:
