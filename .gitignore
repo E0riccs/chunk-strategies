@@ -1,3 +1,4 @@
 config/main_config.yaml
 src/__pycache__/*
-results/*
+results/chunks/*
+results/summary/*
