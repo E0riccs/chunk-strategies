@@ -9,7 +9,7 @@ chunking_strategies:
     params:
       chunk_size: 1000
       chunk_overlap: 200
-  - name: recursive_char_split_150_overlap_15
+  - name: recursive_char_split_1
     method: recursive_character_text_splitter
     params:
       chunk_size: 150

@@ -79,7 +79,7 @@ class ExperimentRunner:
         safe_strategy_name = chunking_strategy_name.replace(' ', '_').lower()
 
         # Save chunked output
-        chunks_filename = f"{safe_file_type_name}_{safe_strategy_name}_{timestamp}_chunks.txt"
+        chunks_filename = f"{safe_file_type_name}_{safe_strategy_name}_chunks.txt"
         chunks_filepath = os.path.join(self.results_dir, 'chunks', chunks_filename)
         save_text_to_file("\n\n---\n\n".join(chunks), chunks_filepath)
 
