@@ -6,6 +6,7 @@ from src.utils import load_yaml_config # For potentially loading API key or othe
 # It's good practice to allow API key to be set via environment variable
 # or passed as an argument, or even from a main config file (not implemented here for simplicity)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
 
 def main():
     parser = argparse.ArgumentParser(description="Run text chunking experiments.")
@@ -72,15 +73,28 @@ def main():
         
         # Create a default experiments_to_run.yaml if it doesn't exist and run it
         # This makes it easier for the user to get started if they run main.py without args
-        default_experiments_config_path = 'config/experiments_to_run.yaml'
-        abs_default_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), default_experiments_config_path)
+        abs_default_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_EXPERIMENTS_CONFIG_PATH)
 
         if not os.path.exists(abs_default_config_path):
             example_experiments_config = {
                 'experiments': [
                     {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_0'},
                     {'file_type': 'itemized_text', 'chunking_strategy': 'recursive_char_split_150_overlap_15'},
-                ]
+                ],
+                'results': {
+                    'columns_order': [
+                        'timestamp', 'file_type_name', 'chunking_strategy_name', 
+                        'total_processing_time_seconds', 'llm_evaluation_score_1_to_5', 
+                        'avg_cosine_similarity_chunks_vs_original', 'number_of_chunks',
+                        'chunking_method', 'chunking_params', 'file_type_description', 
+                        'test_file_path', 'chunks_output_file', 'evaluation_module_runtime_seconds'
+                    ]
+                },
+                'llm': {
+                    'endpoint': 'https://api.openai.com/v1/chat/completions',
+                    'api_key': 'sk-proj-0000000000000000000000000000000000000000000000000000000000000000',
+                    'model_name': 'gpt-3.5-turbo'
+                }
             }
             import yaml
             try:
@@ -88,10 +102,10 @@ def main():
                     yaml.dump(example_experiments_config, f_yaml, default_flow_style=False, sort_keys=False)
                 print(f"Created default experiments config: {abs_default_config_path}")
             except Exception as e:
-                print(f"Error creating default {default_experiments_config_path}: {e}")
+                print(f"Error creating default {DEFAULT_EXPERIMENTS_CONFIG_PATH}: {e}")
                 return # Exit if cannot create default config
         
-        runner.run_all_experiments_from_config(experiments_config_path=default_experiments_config_path)
+        runner.run_all_experiments_from_config(experiments_config_path=DEFAULT_EXPERIMENTS_CONFIG_PATH)
 
     print("\nMain script execution finished.")
     print(f"Check the '{os.path.abspath(args.results_dir)}' directory for output files.")

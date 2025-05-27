@@ -1,5 +1,24 @@
 experiments:
 - file_type: chapter_text
-  chunking_strategy: simple_chunk_100_overlap_10
+  chunking_strategy: simple_chunk_100_overlap_0
 - file_type: itemized_text
   chunking_strategy: recursive_char_split_150_overlap_15
+results:
+  columns_order:
+  - timestamp
+  - file_type_name
+  - chunking_strategy_name
+  - total_processing_time_seconds
+  - llm_evaluation_score_1_to_5
+  - avg_cosine_similarity_chunks_vs_original
+  - number_of_chunks
+  - chunking_method
+  - chunking_params
+  - file_type_description
+  - test_file_path
+  - chunks_output_file
+  - evaluation_module_runtime_seconds
+llm:
+  endpoint: https://api.openai.com/v1/chat/completions
+  api_key: sk-proj-0000000000000000000000000000000000000000000000000000000000000000
+  model_name: gpt-3.5-turbo
