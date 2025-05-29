@@ -2,9 +2,12 @@ file_types:
   - name: chapter_text
     description: "Long text with chapter-like structure. Example: a novel or a textbook chapter."
     test_file: "data/chapter_book.txt"
-  - name: itemized_text
-    description: "Text structured with clear itemization or bullet points. Example: a list of rules or product features."
-    test_file: "data/rules.txt"
+  - name: rules_complex
+    description: "Long text structured with clear itemization and cross references. Example: legal rules."
+    test_file: "data/rules_complex.txt"
+  - name: rules_simple
+    description: "Short text structured with clear itemization, which usually easy to understand. Example: ticket saling rules."
+    test_file: "data/rules_simple.txt"
   - name: short_plain_text
     description: "Short, unstructured plain text. Example: a user query or a brief note."
     test_file: "data/plain_short.txt"
