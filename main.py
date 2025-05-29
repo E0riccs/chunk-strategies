@@ -1,17 +1,15 @@
 import os
 import argparse
 from src.experiment_runner import ExperimentRunner
-from src.utils import load_yaml_config # For potentially loading API key or other main configs
+from src.llm_evaler import LLMEvaler
 
-# It's good practice to allow API key to be set via environment variable
-# or passed as an argument, or even from a main config file (not implemented here for simplicity)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
+DEFAULT_LLM_CONFIG_PATH = 'config/llm.yaml'
 
 def main():
     parser = argparse.ArgumentParser(description="Run text chunking experiments.")
 
-    # 全部测试项目
+    # 1. 读取参数
     parser.add_argument(
         '--run_all_from_config',
         type=str,
@@ -20,7 +18,6 @@ def main():
              'If provided, --file_type and --strategy are ignored.'
     )
 
-    # 其他参数
     parser.add_argument(
         '--api_key',
         type=str,
@@ -40,6 +37,39 @@ def main():
         print("Warning: OpenAI API key not provided. LLM evaluations will be skipped.")
         print("You can set the OPENAI_API_KEY environment variable or use the --api_key argument.")
 
+    # 2. 针对原材料生成 QA 对
+    llmer = LLMEvaler()
+    
+    abs_default_llm_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LLM_CONFIG_PATH)
+    
+    if not os.path.exists(abs_default_llm_config_path):
+        example_llm_config = {
+            'models':[
+                {
+                    'model': 'model_large',
+                    'model_name': 'gpt-3.5-turbo',
+                    'api_key': 'sk-0000000000000000000000'
+                },
+                {
+                    'model': 'model_medium',
+                    'model_name': 'gpt-4o',
+                    'api_key': 'sk-0000000000000000000000'
+                }
+            ]
+        }
+        import yaml
+        try:
+            with open(abs_default_llm_config_path, 'w', encoding='utf-8') as f_yaml:
+                yaml.dump(example_llm_config, f_yaml, default_flow_style=False, sort_keys=False)
+            print(f"Created default LLM config: {abs_default_llm_config_path}")
+        except Exception as e:
+            print(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
+            return # Exit if cannot create default config
+    
+    llmer._generate_qa_pairs()
+    
+
+    # 3. 运行实验
     runner = ExperimentRunner(
         file_types_config_path='config/file_types.yaml',
         chunking_strategies_config_path='config/chunking_strategies.yaml',
@@ -55,9 +85,9 @@ def main():
         
         # Create a default experiments_to_run.yaml if it doesn't exist and run it
         # This makes it easier for the user to get started if they run main.py without args
-        abs_default_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_EXPERIMENTS_CONFIG_PATH)
+        abs_default_exp_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_EXPERIMENTS_CONFIG_PATH)
 
-        if not os.path.exists(abs_default_config_path):
+        if not os.path.exists(abs_default_exp_config_path):
             example_experiments_config = {
                 'experiments': [
                     {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_10'},
@@ -71,18 +101,13 @@ def main():
                         'chunking_method', 'chunking_params', 'file_type_description', 
                         'test_file_path', 'chunks_output_file', 'evaluation_module_runtime_seconds'
                     ]
-                },
-                'llm': {
-                    'endpoint': 'https://api.openai.com/v1/chat/completions',
-                    'api_key': 'sk-proj-0000000000000000000000000000000000000000000000000000000000000000',
-                    'model_name': 'gpt-3.5-turbo'
                 }
             }
             import yaml
             try:
-                with open(abs_default_config_path, 'w', encoding='utf-8') as f_yaml:
+                with open(abs_default_exp_config_path, 'w', encoding='utf-8') as f_yaml:
                     yaml.dump(example_experiments_config, f_yaml, default_flow_style=False, sort_keys=False)
-                print(f"Created default experiments config: {abs_default_config_path}")
+                print(f"Created default experiments config: {abs_default_exp_config_path}")
             except Exception as e:
                 print(f"Error creating default {DEFAULT_EXPERIMENTS_CONFIG_PATH}: {e}")
                 return # Exit if cannot create default config
