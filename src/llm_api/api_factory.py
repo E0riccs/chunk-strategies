@@ -1,16 +1,17 @@
-from siliconflow import SiliconflowAPI
+from src.llm_api.siliconflow import SiliconflowAPI
 
 import os
-import sys
 
-# Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, project_root)
+
+# # Add the project root to the Python path
+# project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+# import sys
+# sys.path.insert(0, project_root)
 
 from src.utils import load_yaml_config
 
 class APIFactory:
-    def __init__(self,config_path='config/llm_info.yaml', model_id='model_gen_qa1'):
+    def __init__(self, model_id, config_path='config/llm_info.yaml'):
         """
         Initialize API client.
 
@@ -41,9 +42,9 @@ class APIFactory:
                 return model_info
         return None
     
-    def create_api(self, api_platform):
+    def create_api(self, api_platform, **kwargs):
         if api_platform == 'siliconflow':
-            return SiliconflowAPI(self.model_id, self.url, self.api_key, self.model_name)
+            return SiliconflowAPI(self.model_id, self.url, self.api_key, self.model_name, **kwargs)
         else:
             raise ValueError(f"Unknown api_platform: {api_platform}")
 
@@ -53,6 +54,8 @@ if __name__ == '__main__':
     try: 
         # Create an instance of the API client
         # Adjust the config_path to be relative to the project root when running this script directly.
+        json_schema = {}
+
         api = APIFactory(config_path='config/llm_info.yaml', model_id='model_gen_qa2').create_api(api_platform='siliconflow')
         
         # Make a chat request

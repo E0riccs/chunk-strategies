@@ -1,13 +1,12 @@
 import requests
-import os
-import sys
 
 class SiliconflowAPI:
-    def __init__(self, model_id, url, api_key, model_name):
+    def __init__(self, model_id, url, api_key, model_name, **kwargs):
         self.model_id = model_id
         self.url = url
         self.api_key = api_key
         self.model_name = model_name
+        self.kwargs = kwargs
 
     def send_message(self, 
                     user_content, 
@@ -34,6 +33,8 @@ class SiliconflowAPI:
         }
         if tools:
             payload["tools"] = tools
+        if self.kwargs.get('json_schema'):
+            payload['response_format'] = self.kwargs['json_schema']
 
         headers = {
             "Authorization": self.api_key,
@@ -42,3 +43,7 @@ class SiliconflowAPI:
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
         return response.text
+
+    def results_from_json(self, json_response):
+        pass
+        

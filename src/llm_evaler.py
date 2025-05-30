@@ -1,70 +1,86 @@
 import os
-import yaml
-from llm_api.api_factory import APIFactory
+
+from src.llm_api.api_factory import APIFactory
+from src.llm_utils.qa_extra import extract_qa_pairs
 
 LLM_API_PLATFORM = 'siliconflow'
 
 # from sentence_transformers import CrossEncoder
 
-# 假设的大模型调用接口，实际使用时需要替换为真实的大模型 SDK 调用
-def call_large_llm(prompt, text_content):
-    print(f"Calling Large LLM with prompt: {prompt[:50]}... and text_content: {text_content[:50]}...")
-    # 模拟返回QA对列表，每个元素是一个包含 'question' 和 'answer' 的字典
-    return [
-        {"question": "示例问题1", "answer": "示例答案1"},
-        {"question": "示例问题2", "answer": "示例答案2"}
-    ]
-
-def call_small_llm(prompt, context, question):
-    print(f"Calling Small LLM with prompt: {prompt[:50]}..., context: {context[:50]}..., question: {question[:50]}...")
-    # 模拟返回答案字符串
-    return "模拟的小模型回答"
-
 class LLMEvaler:
-    def __init__(self, config_path="config", output_dir="results/qa_pairs", llm_api_platform = LLM_API_PLATFORM):
+    def __init__(self, model_id, config_path="config", llm_api_platform = LLM_API_PLATFORM):
+        self.model_id = model_id
+        self.llm_api_platform = llm_api_platform
         self.config_path = config_path
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
-        self.prompt = self._load_prompt()
+        self.config_file_path = os.path.join(self.config_path, "llm_info.yaml")
 
         self.load_api()
 
     def load_api(self):
-        self.llm_api = APIFactory(config_path=self.config_path)
-        self.llm_api.create_api(llm_api_platform)
+        self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path, api_platform=self.llm_api_platform)
 
     def _load_prompt(self, task):
+        '''
+        加载原始 Prompt
+        '''
         prompt_file_path = os.path.join(self.config_path, "prompts.md")
 
         try:
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
-                return f.read()
+                # 根据任务，从不同的一级标题下内容下读取提示词
+                prompt = ""
+                for line in f:
+                    if line.startswith("##"):
+                        if line.strip() == f"## {task}":
+                            # 读取下一行，直到遇到新的一级标题
+                            next_line = f.readline()
+                            while not next_line.startswith("##"):
+                                prompt += next_line
+                                next_line = f.readline()
+                            break
+                return prompt
+                
         except FileNotFoundError:
             print(f"Warning: Prompt file not found at {prompt_file_path}")
-            return "Default prompt: You are a helpful assistant."
         except Exception as e:
             print(f"Error loading prompt file: {e}")
-            return "Default prompt: You are a helpful assistant."
 
-    def _call_llm(self, model_name, prompt, context=None, question=None):
+    def build_content(self, prompt, original_text, **kwargs):
+        '''
+        根据原始提示词和附加信息构建最终的用户输入内容
+        '''
+        return prompt + "\n\n" + original_text
+
+    def _call_llm(self, api, user_content):
         '''
         调用 LLM 的接口，以json格式返回回答。
         '''
-        pass
+        response = api.send_message(user_content)
+        return response
 
-    def generate_qa_pairs(self, original_text, file_type="original_text"):
+    def _generate_qa_pairs(self, original_text, output_file_path):
         """
         使用大模型（large）针对原文生成QA对，并储存至本地 filetype.txt 文件中。
         Args:
             original_text (str): 原始文本内容。
-            file_type (str): 用于构成输出文件名的一部分, e.g., 'rules_complex'.
+            output_file_path (str): 输出文件路径。
         """
-        print(f"Generating QA pairs for {file_type}...")
+        print(f"Generating QA pairs for {output_file_path}...")
         # 这里需要调用大模型（large）来生成QA对
         # 假设 call_large_llm 是一个调用大模型的函数
-        qa_pairs = self._call_llm(self.large_model, self.prompt, original_text) # 传递加载的prompt和原文
+        
+        # json_schema = {
+        #     "score": "integer (0-100)",
+        #     "reason": "string (评分理由)",
+        #     "keywords": "array (提取的关键词)"
+        # }
+        api = self.llm_api_factory.create_api(api_platform=self.llm_api_platform)
+        prompt = self._load_prompt("GenQAs")
 
-        output_file_path = os.path.join(self.output_dir, f"{file_type}_qa_pairs.txt")
+        raw_ans = self._call_llm(api, self.build_content(prompt, original_text)) # 传递加载的prompt和原文
+        raw_ans = api.results_from_json(raw_ans)
+        qa_pairs = extract_qa_pairs(raw_ans)
+
         try:
             with open(output_file_path, 'w', encoding='utf-8') as f:
                 for qa in qa_pairs:
@@ -74,6 +90,37 @@ class LLMEvaler:
         except Exception as e:
             print(f"Error writing QA pairs to file {output_file_path}: {e}")
         return qa_pairs
+
+    def generate_qa_pairs(self, input_path='data', output_path='data/qa_pairs'):
+        """
+        使用大模型（large）针对所有原文生成QA对。
+        Args:
+            input_path (str): 包含原始文本文件的目录路径。
+            output_path (str): 保存生成的QA对文件的目录路径。
+        """
+        os.makedirs(output_path, exist_ok=True)
+        print(f"Generating QA pairs from files in {input_path} to {output_path}")
+
+        for filename in os.listdir(input_path):
+            file_path = os.path.join(input_path, filename)
+            if os.path.isfile(file_path):
+                file_name = os.path.splitext(filename)[0] # 从名字中获取文件类型
+                output_file_path = os.path.join(output_path, f"{file_name}_qa_pairs.txt")
+
+                if os.path.exists(output_file_path):
+                    print(f"QA pairs for {file_name} already exist at {output_file_path}. Skipping.")
+                    continue
+
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        original_text = f.read()
+                    if original_text.strip(): # Ensure file is not empty
+                        self._generate_qa_pairs(original_text, output_file_path)
+                    else:
+                        print(f"File {filename} is empty. Skipping.")
+                except Exception as e:
+                    print(f"Error processing file {filename}: {e}")
+        
 
     def answer_questions_with_reranker(self, chunks, questions):
         """

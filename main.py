@@ -25,13 +25,21 @@ def main():
         help='Directory to save experiment results. Default: results/'
     )
 
+    parser.add_argument(
+        '--model_id',
+        type=str,
+        default='model_gen_qa2',
+        help='ID of the model to use for LLM calls. Default: model_large'
+    )
+
     args = parser.parse_args()
 
-    # 2. 针对原材料生成 QA 对
-    llmer_gen = LLMEvaler()
-    
+    # 2. 针对原材料生成 QA 对s
+    # !!! 没有 model_id 参数呢？
+    llmer_gen = LLMEvaler(config_path= 'config', model_id = args.model_id)
+
     abs_default_llm_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LLM_CONFIG_PATH)
-    
+
     if not os.path.exists(abs_default_llm_config_path):
         example_llm_config = {
             'models':[
@@ -58,7 +66,7 @@ def main():
             print(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
             return # Exit if cannot create default config
     
-    llmer_gen._generate_qa_pairs()
+    llmer_gen.generate_qa_pairs()
     
 
     # 3. 运行实验
