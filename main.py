@@ -4,7 +4,7 @@ from src.experiment_runner import ExperimentRunner
 from src.llm_evaler import LLMEvaler
 
 DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
-DEFAULT_LLM_CONFIG_PATH = 'config/llm.yaml'
+DEFAULT_LLM_CONFIG_PATH = 'config/llm_info.yaml'
 
 def main():
     parser = argparse.ArgumentParser(description="Run text chunking experiments.")
@@ -19,12 +19,6 @@ def main():
     )
 
     parser.add_argument(
-        '--api_key',
-        type=str,
-        default=OPENAI_API_KEY,
-        help='OpenAI API key. Defaults to OPENAI_API_KEY environment variable.'
-    )
-    parser.add_argument(
         '--results_dir',
         type=str,
         default='results',
@@ -33,12 +27,8 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.api_key:
-        print("Warning: OpenAI API key not provided. LLM evaluations will be skipped.")
-        print("You can set the OPENAI_API_KEY environment variable or use the --api_key argument.")
-
     # 2. 针对原材料生成 QA 对
-    llmer = LLMEvaler()
+    llmer_gen = LLMEvaler()
     
     abs_default_llm_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LLM_CONFIG_PATH)
     
@@ -48,12 +38,14 @@ def main():
                 {
                     'model': 'model_large',
                     'model_name': 'gpt-3.5-turbo',
-                    'api_key': 'sk-0000000000000000000000'
+                    'api_key': 'sk-0000000000000000000000',
+                    'end_pointy': 'https://api.openai.com/v1/chat/completions'
                 },
                 {
                     'model': 'model_medium',
                     'model_name': 'gpt-4o',
-                    'api_key': 'sk-0000000000000000000000'
+                    'api_key': 'sk-0000000000000000000000',
+                    'end_pointy': 'https://api.openai.com/v1/chat/completions'
                 }
             ]
         }
@@ -66,15 +58,14 @@ def main():
             print(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
             return # Exit if cannot create default config
     
-    llmer._generate_qa_pairs()
+    llmer_gen._generate_qa_pairs()
     
 
     # 3. 运行实验
     runner = ExperimentRunner(
         file_types_config_path='config/file_types.yaml',
         chunking_strategies_config_path='config/chunking_strategies.yaml',
-        results_dir=args.results_dir,
-        openai_api_key=args.api_key
+        results_dir = args.results_dir
     )
 
     if args.run_all_from_config:

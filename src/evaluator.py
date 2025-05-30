@@ -2,20 +2,16 @@ import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from openai import OpenAI # Assuming OpenAI for LLM evaluation
+from src.llm_evaler import LLMEvaler
+
 import os
 import re
 
 class Evaluator:
-    def __init__(self, llm_api_key=None, llm_model_name="gpt-3.5-turbo"):
-        self.llm_api_key = llm_api_key if llm_api_key else os.getenv("OPENAI_API_KEY")
-        if not self.llm_api_key:
-            print("Warning: OPENAI_API_KEY not provided or found in environment. LLM evaluation will be skipped.")
-            self.llm_client = None
-        else:
-            self.llm_client = OpenAI(api_key=self.llm_api_key)
-        self.llm_model_name = llm_model_name
+    def __init__(self):
+        self.llm_evaler = LLMEvaler()
 
+    
     def _calculate_cosine_similarity(self, original_text, chunks):
         """Calculates the average cosine similarity between original text and its chunks."""
         if not chunks:

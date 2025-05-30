@@ -1,5 +1,10 @@
 import os
 import yaml
+from llm_api.api_factory import APIFactory
+
+LLM_API_PLATFORM = 'siliconflow'
+
+# from sentence_transformers import CrossEncoder
 
 # 假设的大模型调用接口，实际使用时需要替换为真实的大模型 SDK 调用
 def call_large_llm(prompt, text_content):
@@ -16,17 +21,21 @@ def call_small_llm(prompt, context, question):
     return "模拟的小模型回答"
 
 class LLMEvaler:
-    def __init__(self, config_path="config", output_dir="results/qa_pairs"):
+    def __init__(self, config_path="config", output_dir="results/qa_pairs", llm_api_platform = LLM_API_PLATFORM):
         self.config_path = config_path
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         self.prompt = self._load_prompt()
-        # 大模型和小模型的参数可以在这里加载，或者作为方法参数传入
-        # self.large_model_params = self._load_model_params("large_model.yaml")
-        # self.small_model_params = self._load_model_params("small_model.yaml")
 
-    def _load_prompt(self):
-        prompt_file_path = os.path.join(self.config_path, "prompt.txt")
+        self.load_api()
+
+    def load_api(self):
+        self.llm_api = APIFactory(config_path=self.config_path)
+        self.llm_api.create_api(llm_api_platform)
+
+    def _load_prompt(self, task):
+        prompt_file_path = os.path.join(self.config_path, "prompts.md")
+
         try:
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -37,17 +46,11 @@ class LLMEvaler:
             print(f"Error loading prompt file: {e}")
             return "Default prompt: You are a helpful assistant."
 
-    # def _load_model_params(self, model_config_file):
-    #     params_file_path = os.path.join(self.config_path, model_config_file)
-    #     try:
-    #         with open(params_file_path, 'r', encoding='utf-8') as f:
-    #             return yaml.safe_load(f)
-    #     except FileNotFoundError:
-    #         print(f"Warning: Model config file not found at {params_file_path}")
-    #         return {}
-    #     except Exception as e:
-    #         print(f"Error loading model config file {params_file_path}: {e}")
-    #         return {}
+    def _call_llm(self, model_name, prompt, context=None, question=None):
+        '''
+        调用 LLM 的接口，以json格式返回回答。
+        '''
+        pass
 
     def generate_qa_pairs(self, original_text, file_type="original_text"):
         """
@@ -59,7 +62,7 @@ class LLMEvaler:
         print(f"Generating QA pairs for {file_type}...")
         # 这里需要调用大模型（large）来生成QA对
         # 假设 call_large_llm 是一个调用大模型的函数
-        qa_pairs = call_large_llm(self.prompt, original_text) # 传递加载的prompt和原文
+        qa_pairs = self._call_llm(self.large_model, self.prompt, original_text) # 传递加载的prompt和原文
 
         output_file_path = os.path.join(self.output_dir, f"{file_type}_qa_pairs.txt")
         try:
@@ -97,7 +100,7 @@ class LLMEvaler:
             
             # 2. Use small LLM to answer the question based on the reranked chunk(s)
             # 假设 call_small_llm 是调用小模型的函数
-            answer = call_small_llm(self.prompt, relevant_chunk, question_text)
+            answer = self._call_llm(self.small_model, self.prompt, relevant_chunk, question_text)
             results.append({"question": question_text, "reranked_answer": answer})
             print(f"Q: {question_text} -> A (small_llm): {answer}")
         return results
@@ -131,10 +134,8 @@ class LLMEvaler:
                 matched_questions += 1
                 original_answer = original_answers_map[question]
                 # 选项2: 使用大模型（large）比较Q-A-A，给出主观评分
-                # score_prompt = f"原始问题: {question}\n原始答案: {original_answer}\n模型回答: {reranked_answer}\n请对模型回答的质量进行评分（1-5分，5分最好），并简要说明理由。"
-                # subjective_score_response = call_large_llm(score_prompt, "") # 第二个参数可能不需要，或根据LLM API调整
-                # For simulation:
-                subjective_score_response = {"score": 4, "reason": "模拟评分：回答基本正确但不够全面。"} 
+                score_prompt = f"原始问题: {question}\n原始答案: {original_answer}\n模型回答: {reranked_answer}\n请对模型回答的质量进行评分（1-5分，5分最好），并简要说明理由。"
+                subjective_score_response = self._call_llm(self.large_model, score_prompt) 
                 subjective_scores.append({
                     "question": question,
                     "original_answer": original_answer,

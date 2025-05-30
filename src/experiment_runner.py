@@ -11,14 +11,13 @@ class ExperimentRunner:
     def __init__(self, 
                  file_types_config_path='config/file_types.yaml',
                  chunking_strategies_config_path='config/chunking_strategies.yaml',
-                 results_dir='results',
-                 openai_api_key=None):
+                 results_dir='results'):
         
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         self.file_handler = FileHandler(config_path=self._abs_path(file_types_config_path))
         self.chunker = Chunker(config_path=self._abs_path(chunking_strategies_config_path))
-        self.evaluator = Evaluator(llm_api_key=openai_api_key)
+        self.evaluator = Evaluator()
         
         self.results_dir = self._abs_path(results_dir)
         if not os.path.exists(self.results_dir):
