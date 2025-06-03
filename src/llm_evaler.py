@@ -1,6 +1,6 @@
 import os
 
-from src.llm_api.api_factory import APIFactory
+from src.llm_utils.api_factory import APIFactory
 from src.llm_utils.qa_extra import extract_qa_pairs
 
 LLM_API_PLATFORM = 'siliconflow'
@@ -8,16 +8,15 @@ LLM_API_PLATFORM = 'siliconflow'
 # from sentence_transformers import CrossEncoder
 
 class LLMEvaler:
-    def __init__(self, model_id, config_path="config", llm_api_platform = LLM_API_PLATFORM):
+    def __init__(self, model_id, config_path="config"):
         self.model_id = model_id
-        self.llm_api_platform = llm_api_platform
         self.config_path = config_path
         self.config_file_path = os.path.join(self.config_path, "llm_info.yaml")
 
         self.load_api()
 
     def load_api(self):
-        self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path, api_platform=self.llm_api_platform)
+        self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path)
 
     def _load_prompt(self, task):
         '''

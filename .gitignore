@@ -4,5 +4,5 @@ results/chunks/*
 results/summary/*
 config/experiments_to_run.yaml
 config/llm_info.yaml
-src/llm_api/__pycache__/*
 src/llm_utils/__pycache__/*
+src/llm_utils/apis/__pycache__/*

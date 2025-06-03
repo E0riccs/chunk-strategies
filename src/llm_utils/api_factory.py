@@ -1,13 +1,11 @@
-from src.llm_api.siliconflow import SiliconflowAPI
-
 import os
 
+# Add the project root to the Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+import sys
+sys.path.insert(0, project_root)
 
-# # Add the project root to the Python path
-# project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-# import sys
-# sys.path.insert(0, project_root)
-
+from src.llm_utils.apis import siliconflow
 from src.utils import load_yaml_config
 
 class APIFactory:
@@ -32,6 +30,7 @@ class APIFactory:
         if not self.model_config:
             raise ValueError(f"Model with id '{model_id}' not found in {abs_config_path}")
 
+        self.api_platform = self.model_config.get('platform')
         self.url = self.model_config.get('end_point')
         self.api_key = self.model_config.get('api_key')
         self.model_name = self.model_config.get('model_name')
@@ -42,11 +41,11 @@ class APIFactory:
                 return model_info
         return None
     
-    def create_api(self, api_platform, **kwargs):
-        if api_platform == 'siliconflow':
-            return SiliconflowAPI(self.model_id, self.url, self.api_key, self.model_name, **kwargs)
+    def create_api(self, **kwargs):
+        if self.api_platform == 'siliconflow':
+            return siliconflow.SiliconflowAPI(self.model_id, self.url, self.api_key, self.model_name, **kwargs)
         else:
-            raise ValueError(f"Unknown api_platform: {api_platform}")
+            raise ValueError(f"Unknown api_platform: {self.api_platform}")
 
 
 if __name__ == '__main__':
@@ -56,11 +55,14 @@ if __name__ == '__main__':
         # Adjust the config_path to be relative to the project root when running this script directly.
         json_schema = {}
 
-        api = APIFactory(config_path='config/llm_info.yaml', model_id='model_gen_qa2').create_api(api_platform='siliconflow')
+        api = APIFactory(config_path='config/llm_info.yaml', model_id='model_gen_qa2').create_api()
         
         # Make a chat request
-        user_query = "你觉得LLM相关技术在2025年的发展方向是什么？"
-        response_text = api.send_message(user_query)
-        print(response_text)
+        user_query = "你觉得LLM相关技术在2025年的发展方向是什么？请用100字描述"
+        response = api.send_message(user_query)
+
+        llm_answer = api.answer_from_json(response)
+        print(llm_answer)
+
     except Exception as e:
         print(f"An error occurred: {e}")
