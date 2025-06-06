@@ -12,7 +12,18 @@ class SiliconflowAPI:
 
     def send_message(self, 
                     user_content, 
-                    stream=False, max_tokens=512, thinking_budget=4096, min_p=0.05, stop=None, temperature=0.7, top_p=0.7, top_k=50, frequency_penalty=0.5, n=1, response_format={"type": "text"}, tools=None):
+                    stream=False, 
+                    max_tokens=8192,  # The maximum number of tokens to generate.
+                    thinking_budget=4096,   # Maximum number of tokens for chain-of-thought output. This field applies to all Reasoning models.
+                    min_p=0.05, 
+                    stop=None,  # Up to 4 sequences where the API will stop generating further tokens.
+                    temperature=0.7, 
+                    top_p=0.7, 
+                    top_k=50, 
+                    frequency_penalty=0.5, 
+                    n=1, 
+                    response_format={"type": "text"}, 
+                    tools=None):
         payload = {
             "model": self.model_name,
             "messages": [

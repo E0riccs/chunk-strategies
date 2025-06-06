@@ -24,6 +24,14 @@ def main():
         default='results',
         help='Directory to save experiment results. Default: results/'
     )
+    # 如果已存在qa文件，重建/后续添加/跳过策略
+    parser.add_argument(
+        '--gen_qa',
+        type=str,
+        choices=['rebuild', 'append', 'skip'],
+        default='skip',
+        help='Strategy for generating QA pairs from raw materials. '
+    )
 
     parser.add_argument(
         '--model_id',
@@ -66,7 +74,7 @@ def main():
             print(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
             return # Exit if cannot create default config
     
-    llmer_gen.generate_qa_pairs()
+    llmer_gen.generate_qa_pairs(build_strategy=args.gen_qa)
     
 
     # 3. 运行实验

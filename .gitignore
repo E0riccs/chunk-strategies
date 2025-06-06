@@ -6,3 +6,4 @@ config/experiments_to_run.yaml
 config/llm_info.yaml
 src/llm_utils/__pycache__/*
 src/llm_utils/apis/__pycache__/*
+data/qa_pairs/*

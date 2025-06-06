@@ -57,7 +57,7 @@ class LLM_handler:
         response = self.api.send_message(user_content)
         return response
 
-    def _generate_qa_pairs(self, original_text, output_file_path):
+    def _generate_qa_pairs(self, original_text, output_file_path, build_strategy='skip'):
         """
         使用大模型（large）针对原文生成QA对，并储存至本地 filetype.txt 文件中。
         
@@ -84,21 +84,34 @@ class LLM_handler:
         qa_pairs = extract_qa_pairs(raw_ans[LLMResponseModel.ANS_CONTENT])
 
         try:
+            if not qa_pairs:
+                print(f"No QA pairs generated for {output_file_path}.")
+                return []
+            
+            # 追加策略
+            if build_strategy == 'append':
+                with open(output_file_path, 'r', encoding='utf-8') as f:
+                    existing_content = f.read()
+                existing_qa_pairs = extract_qa_pairs(existing_content)
+                qa_pairs.extend(existing_qa_pairs)
+                print(f"Appending QA pairs to {output_file_path}.")
+
             with open(output_file_path, 'w', encoding='utf-8') as f:
                 for qa in qa_pairs:
                     f.write(f"Q: {qa['question']}\n")
-                    f.write(f"A: {qa['answer']}\n\n")
+                    f.write(f"A: {qa['answers']}\n\n")
             print(f"QA pairs saved to {output_file_path}")
         except Exception as e:
             print(f"Error writing QA pairs to file {output_file_path}: {e}")
         return qa_pairs
 
-    def generate_qa_pairs(self, input_path='data', output_path='data/qa_pairs'):
+    def generate_qa_pairs(self, input_path='data', output_path='data/qa_pairs', build_strategy='skip'):
         """
         使用大模型（large）针对所有原文生成QA对。
         Args:
             input_path (str): 包含原始文本文件的目录路径。
             output_path (str): 保存生成的QA对文件的目录路径。
+            build_strategy (str): 生成QA对的策略，'rebuild'/'append'/'skip'。
         """
         os.makedirs(output_path, exist_ok=True)
         print(f"Generating QA pairs from files in {input_path} to {output_path}")
@@ -109,17 +122,14 @@ class LLM_handler:
                 file_name = os.path.splitext(filename)[0] # 从名字中获取文件类型
                 output_file_path = os.path.join(output_path, f"{file_name}_qa_pairs.txt")
 
-                if os.path.exists(output_file_path):
+                if os.path.exists(output_file_path) and build_strategy == 'skip':
                     print(f"QA pairs for {file_name} already exist at {output_file_path}. Skipping.")
                     continue
 
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         original_text = f.read()
-                    if original_text.strip(): # Ensure file is not empty
-                        self._generate_qa_pairs(original_text, output_file_path)
-                    else:
-                        print(f"File {filename} is empty. Skipping.")
+                        self._generate_qa_pairs(original_text, output_file_path, build_strategy)
                 except Exception as e:
                     print(f"Error processing file {filename}: {e}")
         
