@@ -30,9 +30,9 @@ class APIFactory:
         if not self.model_config:
             raise ValueError(f"Model with id '{model_id}' not found in {abs_config_path}")
 
-        self.api_platform = self.model_config.get('platform')
         self.url = self.model_config.get('end_point')
         self.api_key = self.model_config.get('api_key')
+        self.api_platform = self.model_config.get('platform')
         self.model_name = self.model_config.get('model_name')
     
     def _get_model_config(self, model_id):

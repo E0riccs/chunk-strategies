@@ -1,7 +1,7 @@
 import os
 import argparse
 from src.experiment_runner import ExperimentRunner
-from src.llm_evaler import LLMEvaler
+from src.llm_handler import LLM_handler
 
 DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
 DEFAULT_LLM_CONFIG_PATH = 'config/llm_info.yaml'
@@ -36,7 +36,7 @@ def main():
 
     # 2. 针对原材料生成 QA 对s
     # !!! 没有 model_id 参数呢？
-    llmer_gen = LLMEvaler(config_path= 'config', model_id = args.model_id)
+    llmer_gen = LLM_handler(config_path= 'config', model_id = args.model_id)
 
     abs_default_llm_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LLM_CONFIG_PATH)
 

@@ -2,14 +2,14 @@ import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from src.llm_evaler import LLMEvaler
+from src.llm_handler import LLM_handler
 
 import os
 import re
 
 class Evaluator:
     def __init__(self):
-        self.llm_evaler = LLMEvaler()
+        self.llm_handler = LLM_handler(model_id="model_large")
 
     
     def _calculate_cosine_similarity(self, original_text, chunks):

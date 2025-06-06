@@ -1,13 +1,12 @@
 import os
 
 from src.llm_utils.api_factory import APIFactory
-from src.llm_utils.qa_extra import extract_qa_pairs
-
-LLM_API_PLATFORM = 'siliconflow'
+from src.llm_utils.qa import extract_qa_pairs
+from src.llm_utils.response_model import LLMResponseModel
 
 # from sentence_transformers import CrossEncoder
 
-class LLMEvaler:
+class LLM_handler:
     def __init__(self, model_id, config_path="config"):
         self.model_id = model_id
         self.config_path = config_path
@@ -17,6 +16,7 @@ class LLMEvaler:
 
     def load_api(self):
         self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path)
+        self.api = self.llm_api_factory.create_api()
 
     def _load_prompt(self, task):
         '''
@@ -50,16 +50,20 @@ class LLMEvaler:
         '''
         return prompt + "\n\n" + original_text
 
-    def _call_llm(self, api, user_content):
+    def _call_llm(self, user_content):
         '''
         调用 LLM 的接口，以json格式返回回答。
         '''
-        response = api.send_message(user_content)
+        response = self.api.send_message(user_content)
         return response
 
     def _generate_qa_pairs(self, original_text, output_file_path):
         """
         使用大模型（large）针对原文生成QA对，并储存至本地 filetype.txt 文件中。
+        
+        该函数首先加载 GenQAs 任务的 prompt，接着使用大模型（large）来生成QA对。
+        生成的QA对将以txt格式写入到 output_file_path 中。
+        
         Args:
             original_text (str): 原始文本内容。
             output_file_path (str): 输出文件路径。
@@ -73,12 +77,11 @@ class LLMEvaler:
         #     "reason": "string (评分理由)",
         #     "keywords": "array (提取的关键词)"
         # }
-        api = self.llm_api_factory.create_api(api_platform=self.llm_api_platform)
         prompt = self._load_prompt("GenQAs")
+        raw_ans = self._call_llm(self.build_content(prompt, original_text)) # 传递加载的prompt和原文
+        raw_ans = self.api.answer_from_json(raw_ans)
 
-        raw_ans = self._call_llm(api, self.build_content(prompt, original_text)) # 传递加载的prompt和原文
-        raw_ans = api.results_from_json(raw_ans)
-        qa_pairs = extract_qa_pairs(raw_ans)
+        qa_pairs = extract_qa_pairs(raw_ans[LLMResponseModel.ANS_CONTENT])
 
         try:
             with open(output_file_path, 'w', encoding='utf-8') as f:
