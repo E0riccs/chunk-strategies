@@ -5,6 +5,8 @@ from src.llm_utils.qa import extract_qa_pairs
 from src.llm_utils.response_model import LLMResponseModel
 
 # from sentence_transformers import CrossEncoder
+from src.reranker import Reranker
+from src.vector_store_handler import VectorStoreHandler
 
 class LLM_handler:
     def __init__(self, model_id, config_path="config"):
@@ -13,6 +15,19 @@ class LLM_handler:
         self.config_file_path = os.path.join(self.config_path, "llm_info.yaml")
 
         self.load_api()
+        self.reranker = None
+        # Attempt to load Cohere API key from llm_info.yaml or environment
+        cohere_api_key = self.llm_api_factory.get_api_key('cohere') # Assuming get_api_key can fetch specific keys
+        if not cohere_api_key:
+            cohere_api_key = os.getenv('COHERE_API_KEY')
+        
+        if cohere_api_key:
+            try:
+                self.reranker = Reranker(cohere_api_key=cohere_api_key)
+            except ValueError as e:
+                print(f"Warning: Could not initialize Reranker: {e}. Reranking will be skipped.")
+        else:
+            print("Warning: Cohere API key not found. Reranking will be skipped.")
 
     def load_api(self):
         self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path)
@@ -132,9 +147,63 @@ class LLM_handler:
                         self._generate_qa_pairs(original_text, output_file_path, build_strategy)
                 except Exception as e:
                     print(f"Error processing file {filename}: {e}")
+
+    def load_qa_pairs_from_file(self, file_path):
+        """
+        Loads QA pairs from a specified text file.
+        Each Q and A should be on separate lines, prefixed with "Q: " and "A: ".
+        Args:
+            file_path (str): The absolute path to the QA file.
+        Returns:
+            list: A list of dictionaries, where each dictionary is a QA pair {'question': str, 'answer': str}.
+        """
+        qa_pairs = []
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            current_q = None
+            for line in lines:
+                line = line.strip()
+                if line.startswith("Q:"):
+                    current_q = line[3:].strip()
+                elif line.startswith("A:") and current_q:
+                    answer = line[3:].strip()
+                    qa_pairs.append({"question": current_q, "answer": answer})
+                    current_q = None # Reset for the next pair
+                # Blank lines or other lines are ignored
+        except FileNotFoundError:
+            print(f"Error: QA file not found at {file_path}")
+            return []
+        except Exception as e:
+            print(f"Error reading QA file {file_path}: {e}")
+            return []
+        
+        if not qa_pairs:
+            print(f"No QA pairs loaded from {file_path}. Ensure format is 'Q: ...' and 'A: ...'")
+        else:
+            print(f"Loaded {len(qa_pairs)} QA pairs from {file_path}")
+        return qa_pairs
         
 
-    def answer_questions_with_reranker(self, chunks, questions):
+    def answer_question_rag(self, question_text, vector_store_handler: VectorStoreHandler, 
+                              retrieval_n_results=10, reranker_top_n=3, 
+                              qa_model_id='default_model', # Model for answering the question
+                              vector_store_filter=None):
+        """
+        Answers a single question using a RAG pipeline: retrieve, rerank, then generate answer.
+
+        Args:
+            question_text (str): The question to answer.
+            vector_store_handler (VectorStoreHandler): Instance for retrieving documents.
+            retrieval_n_results (int): Number of documents to retrieve from vector store.
+            reranker_top_n (int): Number of documents to keep after reranking.
+            qa_model_id (str): The model ID to use for generating the final answer.
+            vector_store_filter (dict, optional): Filter for vector store retrieval.
+
+        Returns:
+            dict: Contains the question, retrieved docs, reranked docs, and the final answer.
+        """
         """
         使用大模型（small）对分片结果，进行reranker后，回答Qs；
         Args:
@@ -143,28 +212,99 @@ class LLM_handler:
         Returns:
             list of dict: 每个字典包含 'question' 和 'reranked_answer'。
         """
-        print("Answering questions with reranker...")
-        results = []
-        for q_idx, question_text in enumerate(questions):
-            # 1. Rerank chunks for the current question (这里需要一个reranker实现)
-            # 假设 rerank_chunks 是一个 reranker 函数
-            # reranked_chunks = self.reranker.rerank(question_text, chunks)
-            # For now, let's assume the first chunk is the most relevant after reranking
-            if not chunks:
-                print(f"Warning: No chunks provided for question: {question_text}")
-                results.append({"question": question_text, "reranked_answer": "No chunks to process."})
-                continue
-            
-            relevant_chunk = chunks[0] # 简化处理，实际应为rerank结果
-            
-            # 2. Use small LLM to answer the question based on the reranked chunk(s)
-            # 假设 call_small_llm 是调用小模型的函数
-            answer = self._call_llm(self.small_model, self.prompt, relevant_chunk, question_text)
-            results.append({"question": question_text, "reranked_answer": answer})
-            print(f"Q: {question_text} -> A (small_llm): {answer}")
-        return results
+        print(f"\nProcessing RAG for question: '{question_text}'")
+        
+        # 1. Retrieve documents from vector store
+        retrieved_results = vector_store_handler.query_documents(
+            query_text=question_text, 
+            n_results=retrieval_n_results,
+            where_filter=vector_store_filter
+        )
+        retrieved_docs = retrieved_results.get('documents', [[]])[0]
+        retrieved_metadatas = retrieved_results.get('metadatas', [[]])[0]
 
-    def evaluate_answers(self, generated_qa_pairs, reranked_answers):
+        if not retrieved_docs:
+            print("No documents retrieved from vector store.")
+            return {
+                "question": question_text, 
+                "retrieved_documents": [], 
+                "reranked_documents": [],
+                "final_answer": "Could not retrieve any relevant documents from the vector store.",
+                "context_for_answer": ""
+            }
+        print(f"Retrieved {len(retrieved_docs)} documents from vector store.")
+
+        # 2. Rerank the retrieved documents
+        reranked_docs_content = retrieved_docs
+        if self.reranker:
+            print(f"Reranking {len(retrieved_docs)} documents...")
+            # Pass only document content to reranker
+            reranked_docs_content = self.reranker.rerank_documents(question_text, retrieved_docs, top_n=reranker_top_n)
+            if not reranked_docs_content:
+                print("Reranking returned no documents. Using original retrieved documents.")
+                reranked_docs_content = retrieved_docs[:reranker_top_n] # Fallback
+            else:
+                print(f"Reranked down to {len(reranked_docs_content)} documents.")
+        else:
+            print("Skipping reranking as Reranker is not available. Using top N retrieved documents.")
+            reranked_docs_content = retrieved_docs[:reranker_top_n]
+
+        # 3. Prepare context and generate answer using LLM
+        context_for_answer = "\n\n---\n\n".join(reranked_docs_content)
+        
+        # Load prompt for QA
+        qa_prompt_template = self._load_prompt("RAGQA") # Assuming a new prompt type for RAG QA
+        if not qa_prompt_template:
+            print("Warning: RAGQA prompt not found. Using a default prompt structure.")
+            # Fallback prompt if RAGQA is not defined in prompts.md
+            user_content = f"Based on the following context, please answer the question.\n\nContext:\n{context_for_answer}\n\nQuestion: {question_text}\n\nAnswer:"
+        else:
+            # Build content using the loaded prompt, providing context and question
+            # The build_content method might need to be flexible or a new one created for this
+            user_content = qa_prompt_template.replace("{context}", context_for_answer).replace("{question}", question_text)
+
+        # Use the specified or default LLM for answering
+        # We need to ensure the APIFactory can create an API instance for 'qa_model_id'
+        # For simplicity, let's assume the main 'self.api' can be used if qa_model_id is default,
+        # or a new one is fetched if qa_model_id is different.
+        qa_api = self.api # Default to the handler's main API
+        if qa_model_id != self.model_id:
+            try:
+                qa_api_factory = APIFactory(model_id=qa_model_id, config_path=self.config_file_path)
+                qa_api = qa_api_factory.create_api()
+                print(f"Using LLM '{qa_model_id}' for QA.")
+            except Exception as e:
+                print(f"Warning: Could not load LLM '{qa_model_id}' for QA. Falling back to default. Error: {e}")
+        
+        print("Generating final answer using LLM...")
+        llm_response_raw = qa_api.send_message(user_content)
+        final_answer = qa_api.answer_from_json(llm_response_raw).get(LLMResponseModel.ANS_CONTENT, "Error extracting answer.")
+        
+        print(f"LLM Answer: {final_answer}")
+
+        return {
+            "question": question_text,
+            "retrieved_documents_count": len(retrieved_docs),
+            "retrieved_documents_preview": [doc[:100] + "..." for doc in retrieved_docs[:3]], # Preview of retrieved
+            "reranked_documents_count": len(reranked_docs_content),
+            "reranked_documents_content": reranked_docs_content, # Content of reranked docs used for context
+            "context_for_answer": context_for_answer,
+            "final_answer": final_answer
+        }
+
+    def evaluate_rag_answer(self, question, generated_answer, reference_answer=None, eval_model_id='default_model'):
+        """
+        Evaluates a single RAG answer, potentially against a reference answer using an LLM.
+
+        Args:
+            question (str): The question that was asked.
+            generated_answer (str): The answer generated by the RAG pipeline.
+            reference_answer (str, optional): The ground truth or ideal answer.
+            eval_model_id (str): The LLM model ID to use for evaluation.
+
+        Returns:
+            dict: Evaluation metrics (e.g., score, reasoning).
+        """
         """
         计算QA对的召回率；/ 使用大模型（large）比较Q-A-A，给出主观评分；
         Args:
@@ -173,49 +313,61 @@ class LLM_handler:
         Returns:
             dict: 包含评估结果，例如 'recall' 或 'subjective_scores'.
         """
-        print("Evaluating answers...")
-        # 选项1: 计算召回率 (简单示例，基于问题匹配)
-        # 假设问题完全一致才算匹配
-        # 注意：这是一个非常简化的召回率计算，实际可能需要更复杂的匹配逻辑（如语义相似度）
+        print(f"Evaluating RAG answer for question: '{question}'")
+        eval_api = self.api # Default to the handler's main API
+        if eval_model_id != self.model_id:
+            try:
+                eval_api_factory = APIFactory(model_id=eval_model_id, config_path=self.config_file_path)
+                eval_api = eval_api_factory.create_api()
+                print(f"Using LLM '{eval_model_id}' for evaluation.")
+            except Exception as e:
+                print(f"Warning: Could not load LLM '{eval_model_id}' for evaluation. Falling back to default. Error: {e}")
         
-        # 创建一个从问题到原始答案的映射，方便查找
-        original_answers_map = {qa['question']: qa['answer'] for qa in generated_qa_pairs}
-        
-        matched_questions = 0
-        total_generated_questions = len(generated_qa_pairs)
-        subjective_scores = []
+        # Define a JSON schema for the evaluation output
+        # This helps in getting structured output from the LLM
+        evaluation_schema = {
+            "type": "object",
+            "properties": {
+                "score": {"type": "integer", "description": "Faithfulness and relevance score from 1 (poor) to 5 (excellent)."},
+                "reason": {"type": "string", "description": "Brief explanation for the score."},
+                "critique": {"type": "string", "description": "Suggestions for improvement, if any."}
+            },
+            "required": ["score", "reason"]
+        }
 
-        for reranked_qa in reranked_answers:
-            question = reranked_qa['question']
-            reranked_answer = reranked_qa['reranked_answer']
-            
-            if question in original_answers_map:
-                matched_questions += 1
-                original_answer = original_answers_map[question]
-                # 选项2: 使用大模型（large）比较Q-A-A，给出主观评分
-                score_prompt = f"原始问题: {question}\n原始答案: {original_answer}\n模型回答: {reranked_answer}\n请对模型回答的质量进行评分（1-5分，5分最好），并简要说明理由。"
-                subjective_score_response = self._call_llm(self.large_model, score_prompt) 
-                subjective_scores.append({
-                    "question": question,
-                    "original_answer": original_answer,
-                    "reranked_answer": reranked_answer,
-                    "score": subjective_score_response.get('score', 'N/A'),
-                    "reason": subjective_score_response.get('reason', 'N/A')
-                })
-                print(f"Subjective score for Q: {question} -> Score: {subjective_score_response.get('score', 'N/A')}")
+        eval_prompt_template = self._load_prompt("RAGEval") # Expects RAGEval in prompts.md
+        if not eval_prompt_template:
+            print("Warning: RAGEval prompt not found. Using a default evaluation prompt.")
+            if reference_answer:
+                user_content = f"Question: {question}\nReference Answer: {reference_answer}\nGenerated Answer: {generated_answer}\n\nPlease evaluate the Generated Answer based on its faithfulness to the context (if provided implicitly) and relevance to the Question. If a Reference Answer is provided, also consider its correctness compared to it. Provide a score from 1 to 5 (5 is best) and a brief reason. Format your response as a JSON object with keys 'score' (integer) and 'reason' (string)."
             else:
-                 subjective_scores.append({
-                    "question": question,
-                    "original_answer": "N/A (Question not found in generated QA)",
-                    "reranked_answer": reranked_answer,
-                    "score": "N/A",
-                    "reason": "原始QA中未找到此问题"
-                })
-
-        recall = (matched_questions / total_generated_questions) if total_generated_questions > 0 else 0
-        print(f"Recall: {matched_questions}/{total_generated_questions} = {recall:.2f}")
+                user_content = f"Question: {question}\nGenerated Answer: {generated_answer}\n\nPlease evaluate the Generated Answer based on its relevance to the Question and general quality. Provide a score from 1 to 5 (5 is best) and a brief reason. Format your response as a JSON object with keys 'score' (integer) and 'reason' (string)."
+        else:
+            user_content = eval_prompt_template.replace("{question}", question)\
+                                            .replace("{generated_answer}", generated_answer)\
+                                            .replace("{reference_answer}", reference_answer if reference_answer else "N/A")
         
-        return {"recall": recall, "subjective_scores": subjective_scores}
+        # Instruct the LLM to respond in JSON format according to the schema
+        # This might require specific prompting techniques depending on the LLM API
+        # For OpenAI, you can use the `response_format` parameter in newer API versions.
+        # For others, you might add instructions like "Please respond in JSON format matching this schema: {json_schema_string}"
+        # For simplicity, we'll assume the prompt guides the LLM sufficiently or the API handles JSON output.
+        
+        # Add JSON schema instruction to the user content if not using a specific API feature for JSON mode
+        if not (hasattr(eval_api, 'supports_json_mode') and eval_api.supports_json_mode()):
+             user_content += f"\n\nRespond with a JSON object matching the following schema: {evaluation_schema}"
+
+        raw_eval_response = eval_api.send_message(user_content, response_format={'type': 'json_object'}) # Assuming send_message can take response_format
+        
+        # The answer_from_json might need to be robust to parse the JSON string if the API returns it as a string
+        evaluation_result = eval_api.answer_from_json(raw_eval_response, is_direct_json=True) # is_direct_json if API returns parsed dict
+
+        if not isinstance(evaluation_result, dict) or not all(k in evaluation_result for k in evaluation_schema['required']):
+            print(f"Warning: LLM evaluation did not return the expected JSON structure. Response: {evaluation_result}")
+            return {"score": "N/A", "reason": "Error in parsing LLM evaluation.", "critique": "N/A", "raw_response": evaluation_result}
+
+        print(f"Evaluation - Score: {evaluation_result.get('score')}, Reason: {evaluation_result.get('reason')}")
+        return evaluation_result
 
 # 示例用法 (可以放在 main.py 或测试脚本中)
 if __name__ == '__main__':
