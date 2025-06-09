@@ -8,8 +8,8 @@ import os
 import re
 
 class Evaluator:
-    def __init__(self):
-        self.llm_handler = LLM_handler(model_id="model_large")
+    def __init__(self, model_id):
+        self.llm_handler = LLM_handler(model_id=model_id)
 
     
     def _calculate_cosine_similarity(self, original_text, chunks):

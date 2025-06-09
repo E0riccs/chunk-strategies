@@ -56,6 +56,7 @@ class SiliconflowAPI:
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
         print("Response with code: ", response.status_code)
+        # print("Response with content: ", response.text)
         return response
 
 
