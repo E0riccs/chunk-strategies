@@ -9,7 +9,7 @@ class SiliconflowAPI:
         self.kwargs = kwargs
 
     def get_embedding(self, 
-                    user_content):
+                user_content):
         """
             Network request for embedding generation.
         """

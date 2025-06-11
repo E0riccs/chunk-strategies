@@ -5,7 +5,6 @@ import uuid
 import chromadb.utils.embedding_functions as embedding_functions
 from src.rag_utils.vector_store_handler import VectorStoreHandler
 from src.rag_utils.reranker import Reranker
-from src.llm_handler import LLM_handler
 
 class RAGHandler:
     """

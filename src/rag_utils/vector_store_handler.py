@@ -1,58 +1,86 @@
-import chromadb
-from chromadb.utils import embedding_functions
 import os
 
-# from langchain_community.vectorstores import Chroma # Alternative using LangChain wrapper
-# from langchain_openai import OpenAIEmbeddings # Alternative for embeddings
+import chromadb
+from chromadb.utils import embedding_functions
+
+# Add the project root to the Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+import sys
+sys.path.insert(0, project_root)
+
+from src.rag_utils.api_factory import APIFactory
+
 
 class VectorStoreHandler:
-    def __init__(self, 
+    def __init__(self,
                  collection_name="rag_chunks", 
                  persist_directory="db/chroma_db", 
-                 embedding_model_name="all-MiniLM-L6-v2", 
-                 openai_api_key=None, 
-                 openai_embedding_model="text-embedding-ada-002",
-                 use_openai_embeddings=False): 
+                 use_api_embeddings= True, 
+                 embedding_model_name= None,
+                 api_platform = None):
         """
         Initializes the VectorStoreHandler.
 
         Args:
             persist_directory (str): Directory to persist ChromaDB data.
             collection_name (str): Name of the collection in ChromaDB.
-            embedding_model_name (str): Name of the SentenceTransformer model for embeddings.
-                                         Used if use_openai_embeddings is False.
-            openai_api_key (str, optional): OpenAI API key. Required if use_openai_embeddings is True.
-            openai_embedding_model (str): Name of the OpenAI embedding model.
-                                          Used if use_openai_embeddings is True.
-            use_openai_embeddings (bool): If True, uses OpenAI embeddings. Otherwise, uses SentenceTransformer.
+            use_api_embeddings (bool): If True, uses API embeddings. Otherwise, uses SentenceTransformer.
+            embedding_model_name (str): Name of the model for embeddings.(API)
         """
         if not os.path.exists(persist_directory):
             os.makedirs(persist_directory)
             print(f"Created persistence directory: {persist_directory}")
 
-        self.client = chromadb.PersistentClient(path=persist_directory)
+        self.api_in_chroma = True
+
+        self.client = chromadb.PersistentClient(path=persist_directory) # 持久化保存
         self.collection_name = collection_name
 
-        if use_openai_embeddings:
-            if not openai_api_key:
-                raise ValueError("OpenAI API key is required when use_openai_embeddings is True.")
-            self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=openai_api_key,
-                model_name=openai_embedding_model
-            )
-            print(f"Using OpenAI embeddings with model: {openai_embedding_model}")
-        else:
-            self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name=embedding_model_name
-            )
-            print(f"Using SentenceTransformer embeddings with model: {embedding_model_name}")
+        if use_api_embeddings:
+            # api embedding
+            if not embedding_model_name:
+                raise ValueError("embedding_model_name must be specified when use_api_embeddings is True")
+            if not api_platform:
+                raise ValueError("api_platform must be specified when use_api_embeddings is True")
 
-        self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
-            embedding_function=self.embedding_function
-        )
+            if self.is_in_chroma_api_embeddings(api_platform):
+                self.api_in_chroma = True
+                self.embedding_function = embedding_functions.known_embedding_functions[api_platform](
+                    model_name=embedding_model_name
+                )
+                self.collection = self.client.get_or_create_collection(
+                    name=self.collection_name,
+                    embedding_function=self.embedding_function 
+                )# with embedding function
+                print(f"Using Api embeddings bound with chromadb with model: {self.embedding_model_name}")
+            else:
+                self.api_in_chroma = False
+                self.embedding_function = APIFactory(model_id=embedding_model_name).create_api()
+                self.collection = self.client.get_or_create_collection(
+                    name=self.collection_name
+                )# without embedding function
+
+            self.embedding_model_name = embedding_model_name
+            print(f"Using Api embeddings with model: {self.embedding_model_name}")
+        else:
+            # local embedding
+            self.api_in_chroma = True
+            self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name='all-MiniLM-L6-v2'
+            )
+            self.embedding_model_name = 'SentenceTransformer-all-MiniLM-L6-v2'
+            print(f"Using SentenceTransformer embeddings with model: {self.embedding_model_name}")
+
+            self.collection = self.client.get_or_create_collection(
+                name=self.collection_name,
+                embedding_function=self.embedding_function
+            )
+
         print(f"Successfully connected to collection '{self.collection.name}' with {self.collection.count()} documents.")
 
+    def is_in_chroma_api_embeddings(self, platform_name:str):
+        return platform_name in embedding_functions.known_embedding_functions
+        
     def add_documents(self, chunks, metadatas=None, ids=None):
         """
         Adds documents (chunks) to the ChromaDB collection.
@@ -140,89 +168,26 @@ class VectorStoreHandler:
 
 # Example Usage (for testing purposes)
 if __name__ == '__main__':
-    # Ensure you have an OpenAI API key set as an environment variable 
-    # if you want to test with use_openai_embeddings=True
-    # OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    # connect to db
+    vector_store = VectorStoreHandler(
+        collection_name="rag_chunks_test", 
+        persist_directory="db/chroma_db", 
+        use_api_embeddings=True, 
+        embedding_model_name="default_embedding", 
+        api_platform="siliconflow")
 
-    print("Initializing VectorStoreHandler (default SentenceTransformer embeddings)...")
-    # Relative path for persistence from the script's location if run directly
-    # For project structure, this path might need adjustment or be absolute
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    persist_path = os.path.join(os.path.dirname(script_dir), 'db', 'chroma_test_db')
+    v2 = VectorStoreHandler(
+        collection_name="rag_chunks_test", 
+        persist_directory="db/chroma_db", 
+        use_api_embeddings=False, 
+        embedding_model_name="all-MiniLM-L6-v2", 
+        api_platform="sentence-transformers")
     
-    vector_store = VectorStoreHandler(persist_directory=persist_path, collection_name="test_collection")
-    print(f"Initial count: {vector_store.get_collection_count()}")
-
-    # Clear collection for a fresh start if it exists from previous runs
-    if vector_store.get_collection_count() > 0:
-        print("Clearing existing test collection...")
-        vector_store.clear_collection()
-        print(f"Count after clearing: {vector_store.get_collection_count()}")
-
-    sample_chunks = [
-        "This is the first document about apples.",
-        "The second document discusses bananas and their properties.",
-        "Oranges are a great source of Vitamin C, making this the third document.",
-        "Apples and oranges are both fruits."
-    ]
-    sample_metadatas = [
-        {"source": "doc_A", "topic": "fruit"},
-        {"source": "doc_B", "topic": "fruit"},
-        {"source": "doc_C", "topic": "fruit"},
-        {"source": "doc_A", "topic": "comparison"}
-    ]
-    sample_ids = ["id1", "id2", "id3", "id4"]
-
-    print("\nAdding documents...")
-    vector_store.add_documents(sample_chunks, sample_metadatas, sample_ids)
-    print(f"Count after adding: {vector_store.get_collection_count()}")
-
-    print("\nQuerying for 'apples'...")
-    results_apple = vector_store.query_documents("apples", n_results=2)
-    if results_apple and results_apple.get('documents'):
-        for i, doc in enumerate(results_apple['documents'][0]):
-            print(f"  Result {i+1}: {doc}")
-            print(f"    Metadata: {results_apple['metadatas'][0][i]}")
-            print(f"    Distance: {results_apple['distances'][0][i]}")
-    else:
-        print("No results for 'apples'.")
-
-    print("\nQuerying for 'vitamin C' with filter source='doc_C'...")
-    results_vitamin_c = vector_store.query_documents("vitamin C", n_results=1, where_filter={"source": "doc_C"})
-    if results_vitamin_c and results_vitamin_c.get('documents'):
-        for i, doc in enumerate(results_vitamin_c['documents'][0]):
-            print(f"  Result {i+1}: {doc}")
-            print(f"    Metadata: {results_vitamin_c['metadatas'][0][i]}")
-    else:
-        print("No results for 'vitamin C' with the specified filter.")
+    v3 = VectorStoreHandler(
+        collection_name="rag_chunks_test", 
+        persist_directory="db/chroma_db", 
+        use_api_embeddings=True,
+        embedding_model_name="xxxx",
+        api_platform="openai"
+    )
     
-    print("\nQuerying for 'bananas' with filter topic='fruit'...")
-    results_bananas = vector_store.query_documents("bananas", n_results=2, where_filter={"topic": "fruit"})
-    if results_bananas and results_bananas.get('documents'):
-        for i, doc in enumerate(results_bananas['documents'][0]):
-            print(f"  Result {i+1}: {doc}")
-            print(f"    Metadata: {results_bananas['metadatas'][0][i]}")
-    else:
-        print("No results for 'bananas' with the specified filter.")
-
-    # Test OpenAI embeddings if API key is available
-    # if OPENAI_API_KEY:
-    #     print("\n--- Testing with OpenAI Embeddings ---")
-    #     openai_persist_path = os.path.join(os.path.dirname(script_dir), 'db', 'chroma_openai_test_db')
-    #     vector_store_openai = VectorStoreHandler(
-    #         persist_directory=openai_persist_path, 
-    #         collection_name="openai_test_collection",
-    #         use_openai_embeddings=True,
-    #         openai_api_key=OPENAI_API_KEY
-    #     )
-    #     if vector_store_openai.get_collection_count() > 0:
-    #         vector_store_openai.clear_collection()
-    #     vector_store_openai.add_documents(sample_chunks, sample_metadatas, sample_ids)
-    #     results_openai = vector_store_openai.query_documents("apples", n_results=2)
-    #     if results_openai and results_openai.get('documents'):
-    #         for i, doc in enumerate(results_openai['documents'][0]):
-    #             print(f"  OpenAI Result {i+1}: {doc}")
-    # else:
-    #     print("\nSkipping OpenAI embeddings test as OPENAI_API_KEY is not set.")
-
-    print("\nVectorStoreHandler example usage finished.")
