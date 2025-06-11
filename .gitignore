@@ -1,9 +1,9 @@
 config/main_config.yaml
-src/__pycache__/*
 results/chunks/*
 results/summary/*
 config/experiments_to_run.yaml
 config/llm_info.yaml
-src/llm_utils/__pycache__/*
-src/llm_utils/apis/__pycache__/*
 data/qa_pairs/*
+
+
+**/__pycache__/*

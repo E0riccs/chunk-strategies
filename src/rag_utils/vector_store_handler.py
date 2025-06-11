@@ -6,12 +6,13 @@ import os
 # from langchain_openai import OpenAIEmbeddings # Alternative for embeddings
 
 class VectorStoreHandler:
-    def __init__(self, persist_directory="db/chroma_db", 
+    def __init__(self, 
                  collection_name="rag_chunks", 
+                 persist_directory="db/chroma_db", 
                  embedding_model_name="all-MiniLM-L6-v2", 
                  openai_api_key=None, 
                  openai_embedding_model="text-embedding-ada-002",
-                 use_openai_embeddings=False):
+                 use_openai_embeddings=False): 
         """
         Initializes the VectorStoreHandler.
 

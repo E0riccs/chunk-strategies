@@ -23,6 +23,7 @@ class SiliconflowAPI:
                     frequency_penalty=0.5, 
                     n=1, 
                     response_format={"type": "text"}, 
+                    # response_format={"type": "json_object"}
                     tools=None):
         payload = {
             "model": self.model_name,
