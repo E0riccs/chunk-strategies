@@ -63,5 +63,14 @@ if __name__ == '__main__':
 
         print(response.text)
 
+
+        api = APIFactory(config_path='config/llm_info.yaml', model_id='default_reranker', api_type='reranker').create_api()
+        user_query = "天气如何"
+        documents = ["今天天气真好","阳光明媚","适合出去散步","希望下午也能保持这样的好天气"]
+        response = api.rerank_documents(user_query, documents)
+
+        print(response.text)
+
+
     except Exception as e:
         print(f"An error occurred: {e}")

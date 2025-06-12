@@ -1,25 +1,19 @@
 import os
-import cohere
+from src.rag_utils.api_factory import APIFactory
 
 class Reranker:
-    def __init__(self, cohere_api_key=None, model='rerank-english-v2.0'): # You can also use 'rerank-multilingual-v2.0'
+    def __init__(self, 
+                 reranker_model_name='default_reranker'):
         """
-        Initializes the Reranker with a Cohere API key.
+        Initializes the Reranker.
 
         Args:
-            cohere_api_key (str, optional): The Cohere API key. 
-                                          If None, it tries to read from COHERE_API_KEY environment variable.
-            model (str): The reranking model to use.
+            reranker_model_name (str): The reranking model to use.
         """
-        if cohere_api_key is None:
-            cohere_api_key = os.getenv('COHERE_API_KEY')
+        api_factory = APIFactory(config_path='config/llm_info.yaml', model_id=reranker_model_name, api_type='reranker')
+        api = api_factory.create_api()
         
-        if not cohere_api_key:
-            raise ValueError("Cohere API key not provided and not found in COHERE_API_KEY environment variable.")
-        
-        self.co = cohere.Client(cohere_api_key)
-        self.model = model
-        print(f"Cohere Reranker initialized with model: {self.model}")
+        self.api = api
 
     def rerank_documents(self, query, documents, top_n=None, return_documents=True):
         """
@@ -45,16 +39,12 @@ class Reranker:
             return documents # Or an empty list, depending on desired behavior
 
         try:
-            rerank_results = self.co.rerank(
+            rerank_results = self.api.rerank_documents(
                 query=query,
                 documents=documents,
                 top_n=top_n,
-                model=self.model,
                 return_documents=False # Get full result objects to access scores and indices
             )
-            
-            # The API returns a RerankResponse object which has a 'results' attribute.
-            # Each item in 'results' has 'document' (if requested), 'index', and 'relevance_score'.
             
             if return_documents:
                 # Sort the original documents based on the reranked order
@@ -65,19 +55,13 @@ class Reranker:
             else:
                 # print(f"Reranked {len(rerank_results.results)} document objects for query: '{query}'")
                 return rerank_results.results # Return the full result objects
-
-        except cohere.CohereAPIError as e:
-            print(f"Cohere API error during reranking: {e}")
-            # Fallback: return original documents or an empty list
-            # For now, returning original documents might be safer for pipeline continuation
-            # return documents 
-            return [] # Or return empty to signal failure
+            
         except Exception as e:
             print(f"An unexpected error occurred during reranking: {e}")
             return []
 
 # Example Usage (for testing purposes)
-if __name__ == '__main__':
+if __name__ == '__main__':  
     # IMPORTANT: Set your COHERE_API_KEY environment variable for this example to run
     # export COHERE_API_KEY='your_cohere_api_key_here'
     
