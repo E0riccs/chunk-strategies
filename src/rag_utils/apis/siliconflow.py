@@ -1,4 +1,6 @@
 import requests
+import json
+from ..response_model import APIResponseModel
 
 class SiliconflowAPI:
     def __init__(self, model_id, url, api_key, model_name, **kwargs):
@@ -16,7 +18,7 @@ class SiliconflowAPI:
         payload = {
             "model": self.model_name,
             "input": user_content,
-            "encoding_format": "base64"
+            "encoding_format": "float"
         }
 
         headers = {
@@ -70,8 +72,41 @@ class SiliconflowAPI:
 
 
 
-    def answer_from_json(self, json_response):
+    def embed_answer_from_json(self, json_response):
         """
-            Parse the JSON response from the API.
+            Parse the JSON response from the embedding API.
+            In this function, we do not extract the real response content (e.g. QAs) but only standardize the response format.
+        """
+
+        json_response = json_response.text 
+        try:
+            response_data = json.loads(json_response)
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON: {e}")
+            return None
+
+        # Extract data safely using .get() method
+        tokens_used = response_data.get('usage', {}).get('total_tokens')
+        embedding_model = response_data.get('model', {})
+        llm_platform = 'siliconflow'  # This is specific to this class
+        
+        data = response_data.get('data', [])
+        if data and isinstance(data, list) and len(data) > 0:
+            embedding = data[0].get('embedding', {})
+        else:
+            embedding = None
+        
+        # Use the standardized response model
+        return APIResponseModel.create_response(
+            tokens_used=tokens_used,
+            model=embedding_model,
+            api_platform=llm_platform,
+            response_content=embedding
+        )
+
+    def rerank_answer_from_json(self, json_response):
+        """
+            Parse the JSON response from the reranking API.
+            In this function, we do not extract the real response content (e.g. QAs) but only standardize the response format.
         """
         pass

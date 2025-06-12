@@ -1,51 +1,39 @@
 import os
 import time
 import datetime
+import yaml
 import pandas as pd
-from src.file_handler import FileHandler
+
 from src.chunker import Chunker
 from src.evaluator import Evaluator
-from src.vector_store_handler import VectorStoreHandler
-from src.llm_handler import LLM_handler # For RAG QA and evaluation
-import uuid # For generating unique IDs for chunks
-from src.utils import save_text_to_file, load_yaml_config
+from src.file_handler import FileHandler
+from src.rag_handler import RAGHandler # Import RAGHandler
+from src.utils import load_yaml_config
 
 class ExperimentRunner:
     def __init__(self, 
                  file_types_config_path='config/file_types.yaml',
                  chunking_strategies_config_path='config/chunking_strategies.yaml',
+                 eval_model_id = None,
                  results_dir='results',
-                 eval_model_id='default_model',
-                 vector_store_persist_dir='db/chroma_main_store',
-                 vector_store_collection_name_prefix='rag_exp'):
+                 llm_config_path='config/llm_info.yaml',
+                 vector_store_base_persist_dir='db/chroma_db',
+                 vector_store_collection_name_prefix='experiment'
+                 ):
         
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.eval_model_id = eval_model_id
         
         self.file_handler = FileHandler(config_path=self._abs_path(file_types_config_path))
         self.chunker = Chunker(config_path=self._abs_path(chunking_strategies_config_path))
-        # Determine the model for the Evaluator's LLM_handler instance
-        # It can be the same as the general eval_model_id or a specific one if needed
-        evaluator_llm_model_id = self.experiments_config.get('evaluator_llm_model', eval_model_id) 
-        self.evaluator = Evaluator(model_id=evaluator_llm_model_id) 
+        self.rag_handler = RAGHandler(vector_store_base_persist_dir = vector_store_base_persist_dir)
 
-        # LLM_handler for RAG QA and RAG evaluation
-        # It uses its own config for models, potentially different from the Evaluator's LLM
-        # config_path should be the directory containing llm_info.yaml and prompts.md
-        llm_handler_config_dir = self._abs_path('config') 
-        self.llm_handler = LLM_handler(model_id=eval_model_id, config_path=llm_handler_config_dir)
-
-        # Initialize VectorStoreHandler - collection name will be dynamic per experiment
-        # Default to SentenceTransformer embeddings if not specified
-        embedding_function_name = self.experiments_config.get('embedding_function', 'sentence-transformers/all-MiniLM-L6-v2')
-        self.vector_store_handler_prototype = VectorStoreHandler(embedding_function_name=embedding_function_name)
-        self.current_vector_store_handler = None # Will be set per experiment run
+        self.experiments_config = {} # Initialize as empty dict, will be populated
         
         self.results_dir = self._abs_path(results_dir)
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)
             print(f"Created results directory: {self.results_dir}")
-
-        self.experiments_config = None
 
         self.all_results_data = []
 
@@ -53,11 +41,25 @@ class ExperimentRunner:
         """Converts a path relative to project root to an absolute path."""
         return os.path.join(self.base_dir, relative_path)
 
-    def run_experiment(self, file_type_name, chunking_strategy_name):
+    def run_experiment(self, setting):
         """Runs a single experiment for a given file type and chunking strategy."""
+        # 0. config
+        file_type_name = setting.get('file_type')
+        chunking_strategy_name = setting.get('chunking_strategy')
+
+        if_use_api_embedding = setting.get('use_api_embedding', True)
+        if if_use_api_embedding:
+            embedding_model_name = setting.get('embedding_model_name', 'default_embedding')
+            embedding_api_platform = setting.get('api_platform', 'siliconflow')
+
+        if_rerank = setting.get('rerank', False)
+        if if_rerank:
+            reranker_method_name = setting.get('reranker_method', '')
+
         print(f"\n--- Running Experiment ---")
         print(f"File Type: {file_type_name}")
         print(f"Chunking Strategy: {chunking_strategy_name}")
+        self.evaluator = Evaluator(model_id=self.eval_model_id, exp_setting=setting) 
 
         # 1. Load original text
         original_text = self.file_handler.load_test_data(file_type_name)
@@ -84,62 +86,30 @@ class ExperimentRunner:
         
         print(f"Successfully chunked text into {len(chunks)} chunks in {chunking_duration:.4f}s.")
 
-        # 3. Initialize Vector Store for this specific experiment run
-        # Sanitize names for file paths first
-        safe_file_type_name = file_type_name.replace(' ', '_').lower()
-        safe_strategy_name = chunking_strategy_name.replace(' ', '_').lower()
-
-        # This creates a unique collection for each file_type + strategy combination to avoid interference
-        # and allows for clean re-runs.
-        collection_name_suffix = f"{safe_file_type_name}_{safe_strategy_name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-        # Sanitize collection_name_suffix further if needed, ChromaDB has restrictions.
-        collection_name_suffix = collection_name_suffix.replace('-', '_') # Replace hyphens
-        current_collection_name = f"{self.vector_store_collection_name_prefix}_{collection_name_suffix}"
         
-        # Ensure collection name is valid for ChromaDB (e.g., length, characters)
-        # A simple truncation and character replacement might be needed for very long names.
-        current_collection_name = current_collection_name[:60] # Max length for collection name is 63
-        current_collection_name = ''.join(c if c.isalnum() or c in ['_', '.'] else '_' for c in current_collection_name)
-        if not current_collection_name[0].isalnum() or not current_collection_name[-1].isalnum():
-             current_collection_name = 'c' + current_collection_name[1:-1] + 'c' # Ensure start/end are alphanumeric
-
-
-        print(f"Initializing VectorStore for collection: {current_collection_name}")
-        self.current_vector_store_handler = VectorStoreHandler(
-            persist_directory=os.path.join(self.vector_store_base_persist_dir, current_collection_name), # Each experiment gets its own sub-folder
-            collection_name=current_collection_name # Unique collection name
-            # Potentially pass openai_api_key if using OpenAI embeddings from config
+        # 3. RAGHandler添加文档到向量数据库
+        self.rag_handler._setup_vector_store(
+            file_type_name=file_type_name,
+            chunking_strategy_name=chunking_strategy_name,
+            use_api_embeddings=if_use_api_embedding,
+            embedding_model_name=embedding_model_name,
+            api_platform=embedding_api_platform
         )
-        # Clear the collection if it somehow exists and we want a fresh start (optional)
-        # self.current_vector_store_handler.clear_collection() 
+        self.rag_handler.add_documents_to_vector_store(
+            chunks=chunks,
+            original_text_length=len(original_text)
+        )
 
-        # 4. Add chunks to Vector Store
-        print(f"Adding {len(chunks)} chunks to vector store...")
-        chunk_metadatas = [
-            {
-                "source_file_type": file_type_name,
-                "chunking_strategy": chunking_strategy_name,
-                "chunk_index": i,
-                "original_text_length": len(original_text)
-            } for i in range(len(chunks))
-        ]
-        # Generate unique IDs for each chunk to ensure they can be individually referenced/updated if needed
-        chunk_ids = [f"{current_collection_name}_chunk_{uuid.uuid4()}" for _ in range(len(chunks))]
-        self.current_vector_store_handler.add_documents(chunks, metadatas=chunk_metadatas, ids=chunk_ids)
-        print(f"Vector store now contains {self.current_vector_store_handler.get_collection_count()} documents.")
-
-        # 5. RAG QA and Evaluation (New Step)
-        # This part needs a predefined set of questions, or questions generated from the original text.
-        # For now, let's assume a placeholder for questions.
-        # These questions could be loaded from the file_type_details or a general config.
+        # 4. RAG QA and Evaluation
+        # Load test questions from file_type_details
         test_questions_source = file_type_details.get('test_questions', [])
         test_questions_for_rag = [] # This will store list of dicts: {'question': ..., 'answer': ...}
 
         if isinstance(test_questions_source, str): # If it's a path to a QA file
             qa_file_path = self._abs_path(test_questions_source) # Ensure absolute path
             print(f"Attempting to load test questions from file: {qa_file_path}")
-            loaded_qas = self.llm_handler.load_qa_pairs_from_file(qa_file_path)
-            # loaded_qas is a list of {'question': ..., 'answer': ...}
+            # Use the RAG LLM handler to load QA pairs
+            loaded_qas = self.llm_handler_for_rag.load_qa_pairs_from_file(qa_file_path)
             test_questions_for_rag = loaded_qas
         elif isinstance(test_questions_source, list):
             # Handles list of strings (questions only) or list of dicts (q/a pairs)
@@ -153,50 +123,16 @@ class ExperimentRunner:
         else:
             print(f"Warning: 'test_questions' format in file_types.yaml for {file_type_name} is not recognized or is empty. RAG QA will be skipped.")
 
-        rag_results = []
-        if self.current_vector_store_handler and test_questions_for_rag:
-            print(f"\n--- Starting RAG QA for {len(test_questions_for_rag)} questions --- ")
-            for q_data in test_questions_for_rag:
-                question_text = q_data.get('question')
-                reference_answer = q_data.get('answer') # Optional reference answer, might be None
-                
-                if not question_text:
-                    print("Skipping empty or invalid question data.")
-                    continue
+        # 5. Answer the question with rag
+        ans_qa = self.rag_handler.answer_question(
+            question_text=test_questions_for_rag[0]['question'],
+            retrieval_n_results=10,
+            reranker_top_n=3,
+            vector_store_filter=None,
+            qa_model_id='default_model',
+            reranker_method_name=reranker_method_name
+        )
 
-                rag_output = self.llm_handler.answer_question_rag(
-                    question_text=question_text,
-                    vector_store_handler=self.current_vector_store_handler,
-                    retrieval_n_results=strategy_details.get('rag_retrieval_n_results', 10),
-                    reranker_top_n=strategy_details.get('rag_reranker_top_n', 3),
-                    qa_model_id=self.experiments_config.get('rag_qa_model', 'default_model'),
-                    vector_store_filter=None
-                )
-                
-                # Evaluate the RAG answer using llm_handler
-                rag_evaluation_metrics = self.llm_handler.evaluate_rag_answer(
-                    question=question_text,
-                    generated_answer=rag_output['final_answer'],
-                    reference_answer=reference_answer, 
-                    eval_model_id=self.experiments_config.get('rag_eval_model', 'default_model')
-                )
-                
-                rag_results.append({
-                    'question': question_text,
-                    'reference_answer': reference_answer if reference_answer else 'N/A',
-                    'generated_answer': rag_output['final_answer'],
-                    'retrieved_docs_count': rag_output['retrieved_documents_count'],
-                    'reranked_docs_count': rag_output['reranked_documents_count'],
-                    'evaluation_score': rag_evaluation_metrics.get('score', 'N/A'),
-                    'evaluation_reason': rag_evaluation_metrics.get('reason', 'N/A'),
-                    'evaluation_critique': rag_evaluation_metrics.get('critique', 'N/A')
-                })
-            print("--- RAG QA Completed ---")
-        else:
-            if not test_questions_for_rag: # Corrected variable name
-                print("Skipping RAG QA as no test questions are defined or loaded.")
-            if not self.current_vector_store_handler:
-                 print("Skipping RAG QA as vector store handler is not initialized.")
 
         # 6. Evaluate chunking using Evaluator
         print("\n--- Evaluating Chunks --- ")
@@ -212,7 +148,7 @@ class ExperimentRunner:
             # 'number_of_chunks': len(chunks), # This is already in chunk_eval_metrics
         }
 
-        # 7. Save results
+        # 6. Save results
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
         # Chunked output is now in the vector store, not saved as a separate text file.
@@ -230,7 +166,7 @@ class ExperimentRunner:
             'chunking_strategy_name': chunking_strategy_name,
             'chunking_method': strategy_details.get('method', 'N/A'),
             'chunking_params': str(strategy_details.get('params', {})),
-            'vector_store_collection': current_collection_name,
+            'vector_store_collection': self.rag_handler.collection_name,
             **metrics, # Unpack combined chunking metrics
             'rag_qa_results': rag_results 
         }
@@ -249,12 +185,7 @@ class ExperimentRunner:
 
         print(f"\n=== Starting Batch of Experiments from {abs_experiments_config_path} ===")
         for exp_setting in self.experiments_config.get('experiments', []):
-            file_type = exp_setting.get('file_type')
-            strategy = exp_setting.get('chunking_strategy')
-            if file_type and strategy:
-                self.run_experiment(file_type, strategy)
-            else:
-                print(f"Warning: Invalid experiment setting in config: {exp_setting}. Skipping.")
+            self.run_experiment(exp_setting)
         
         self.save_all_results_summary()
         print("\n=== All Configured Experiments Completed ===")
@@ -346,7 +277,7 @@ if __name__ == '__main__':
     if not os.path.exists(config_dir):
         os.makedirs(config_dir)
     experiments_yaml_path = os.path.join(config_dir, 'experiments_to_run.yaml')
-    import yaml
+
     try:
         with open(experiments_yaml_path, 'w', encoding='utf-8') as f_yaml:
             yaml.dump(example_experiments_config, f_yaml, default_flow_style=False, sort_keys=False)

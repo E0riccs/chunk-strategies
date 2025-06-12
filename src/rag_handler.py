@@ -2,7 +2,6 @@ import os
 import datetime
 import uuid
 
-import chromadb.utils.embedding_functions as embedding_functions
 from src.rag_utils.vector_store_handler import VectorStoreHandler
 from src.rag_utils.reranker import Reranker
 
@@ -12,7 +11,8 @@ class RAGHandler:
         封装了完整的RAG流程，对外提供简洁的接口
     """
     def __init__(self,
-                 vector_store_base_persist_dir: str):
+                vector_store_base_persist_dir='db/chroma_db',
+                reranker_model_name='default_model'):
         """
         1. 完善向量数据库配置，随实验运行建立实例
         2. 完善重排序配置，随实验运行建立实例
@@ -20,17 +20,18 @@ class RAGHandler:
         Args:
             vector_store_base_persist_dir (str): 向量数据库基础持久化目录
         """
+
         # 向量数据库
         self.vector_store_base_persist_dir = vector_store_base_persist_dir
-
-        # 重排序
-        self.reranker = None
 
 
     def _setup_vector_store(self,
                             file_type_name: str,
                             chunking_strategy_name: str,
-                            vector_store_collection_name_prefix: str = "experiment") -> str:
+                            vector_store_collection_name_prefix: str = "experiment",
+                            use_api_embeddings: bool = False,
+                            embedding_model_name: str = 'default_embedding',
+                            api_platform: str = 'siliconflow') -> str:
         """
         1. 为特定实验设置向量数据库操作实例；
         2. 创建唯一的 collection
@@ -43,10 +44,15 @@ class RAGHandler:
         Returns:
             str: 创建的collection名称
         """
+
+
         # 1. collection
         # 清理名称用于文件路径
-        safe_file_type_name = file_type_name.replace(' ', '_').lower()
-        safe_strategy_name = chunking_strategy_name.replace(' ', '_').lower()
+        self.file_type_name = file_type_name
+        self.chunking_strategy_name = chunking_strategy_name
+
+        safe_file_type_name = self.file_type_name.replace(' ', '_').lower()
+        safe_strategy_name = self.chunking_strategy_name.replace(' ', '_').lower()
 
         # 为每个文件类型+策略组合创建唯一的collection，避免干扰并允许干净的重新运行
         collection_name_suffix = f"{safe_file_type_name}_{safe_strategy_name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -60,53 +66,45 @@ class RAGHandler:
         if not current_collection_name[0].isalnum() or not current_collection_name[-1].isalnum():
              current_collection_name = 'c' + current_collection_name[1:-1] + 'c'  # 确保开始/结束是字母数字
 
+        self.collection_name = current_collection_name
         print(f"Initializing VectorStore for collection: {current_collection_name}")
-        
-        # 2. embedding
-
-
-
-        # 3. vector store handler
+    
+        # 2. vector store handler
         self.vector_store_handler = VectorStoreHandler(
-            persist_directory=os.path.join(self.vector_store_base_persist_dir, current_collection_name),
             collection_name=current_collection_name,
-            embedding_model_name=current_embedding_function.model_name if hasattr(current_embedding_function, 'model_name') else 'sentence-transformers/all-MiniLM-L6-v2',
-            openai_api_key=current_embedding_function.api_key if is_openai_embed and hasattr(current_embedding_function, 'api_key') else None,
-            openai_embedding_model=current_embedding_function.model_name if is_openai_embed and hasattr(current_embedding_function, 'model_name') else 'text-embedding-ada-002',
-            use_openai_embeddings=is_openai_embed
+            persist_directory=os.path.join(self.vector_store_base_persist_dir, current_collection_name),
+            use_api_embeddings=use_api_embeddings,
+            embedding_model_name=embedding_model_name,
+            api_platform=api_platform
         )
         
         return current_collection_name
 
-    def _setup_reranker(self):
+    def _setup_reranker(self, model_name):
         """
         设置重排序器
         """
-        self.reranker = Reranker()
+        self.reranker = Reranker(reranker_model_name=model_name)
 
 
     def add_documents_to_vector_store(self, 
                                     chunks: list, 
-                                    file_type_name: str, 
-                                    chunking_strategy_name: str, 
                                     original_text_length: int) -> None:
         """
         将文档块添加到向量数据库
         
         Args:
             chunks (list): 文档块列表
-            file_type_name (str): 文件类型名称
-            chunking_strategy_name (str): 分块策略名称
             original_text_length (int): 原始文本长度
         """
         if not self.vector_store_handler:
-            raise ValueError("Vector store handler not initialized. Call setup_vector_store_for_experiment first.")
+            raise ValueError("Vector store handler not initialized. Call _setup_vector_store first.")
             
         print(f"Adding {len(chunks)} chunks to vector store...")
         chunk_metadatas = [
             {
-                "source_file_type": file_type_name,
-                "chunking_strategy": chunking_strategy_name,
+                "source_file_type": self.file_type_name,
+                "chunking_strategy": self.chunking_strategy_name,
                 "chunk_index": i,
                 "original_text_length": original_text_length
             } for i in range(len(chunks))
@@ -122,7 +120,8 @@ class RAGHandler:
                         retrieval_n_results: int = 10, 
                         reranker_top_n: int = 3,
                         vector_store_filter: dict = None,
-                        qa_model_id: str = 'default_model') -> dict:
+                        qa_model_id: str = 'default_model',
+                        reranker_method_name: str = 'default_reranker') -> dict:
         """
         Answers a question using the RAG pipeline: retrieve, (optionally) rerank, then generate answer.
 
@@ -168,6 +167,7 @@ class RAGHandler:
             }
 
         # 2. Rerank documents (if reranker is available)
+        self._setup_reranker(reranker_model_name)
         context_for_llm = retrieved_documents
         reranked_documents_count = 0
         if self.reranker and retrieved_documents:

@@ -60,16 +60,18 @@ if __name__ == '__main__':
         # Make a chat request
         user_query = "这是一个测试消息！"
         response = api.get_embedding(user_query)
+        response = api.embed_answer_from_json(response)
 
-        print(response.text)
+        print(response)
 
 
         api = APIFactory(config_path='config/llm_info.yaml', model_id='default_reranker', api_type='reranker').create_api()
         user_query = "天气如何"
         documents = ["今天天气真好","阳光明媚","适合出去散步","希望下午也能保持这样的好天气"]
         response = api.rerank_documents(user_query, documents)
+        response = api.rerank_answer_from_json(response)
 
-        print(response.text)
+        print(response)
 
 
     except Exception as e:

@@ -2,6 +2,8 @@ import os
 
 import chromadb
 from chromadb.utils import embedding_functions
+from src.rag_utils.embeddings import extract_embedding_from_json
+from src.rag_utils.response_model import APIResponseModel
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -26,6 +28,7 @@ class VectorStoreHandler:
             collection_name (str): Name of the collection in ChromaDB.
             use_api_embeddings (bool): If True, uses API embeddings. Otherwise, uses SentenceTransformer.
             embedding_model_name (str): Name of the model for embeddings.(API)
+            api_platform (str): API platform for embeddings.(API)
         """
         if not os.path.exists(persist_directory):
             os.makedirs(persist_directory)
@@ -90,6 +93,7 @@ class VectorStoreHandler:
             chunks (list of str): The text content of the documents.
             metadatas (list of dict, optional): Metadata associated with each document.
             ids (list of str, optional): Unique IDs for each document. If None, generated automatically.
+            embeddings (list of embeddings, optional): Embeddings for each document. If None, generated automatically.
         """
         if not chunks:
             print("No chunks provided to add.")
@@ -107,11 +111,24 @@ class VectorStoreHandler:
             raise ValueError("Number of chunks must match number of ids.")
 
         try:
-            self.collection.add(
-                documents=chunks,
-                metadatas=metadatas,
-                ids=ids
-            )
+            if self.chroma_compatible_api:
+                self.collection.add(
+                    documents=chunks,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+            else:
+                embeddings = []
+                for chunk in chunks:
+                    response = self.embedding_function.get_embedding(chunk)
+                    response = self.embedding_function.embed_answer_from_json(response)
+                    embeddings.append(extract_embedding_from_json(response[APIResponseModel.RESPONSE_CONTENT]))
+                self.collection.add(
+                    documents=chunks,
+                    metadatas=metadatas,
+                    embeddings= embeddings,
+                    ids=ids
+                )
             print(f"Added {len(chunks)} documents to collection '{self.collection.name}'. Total documents: {self.collection.count()}")
         except Exception as e:
             print(f"Error adding documents to ChromaDB: {e}")
