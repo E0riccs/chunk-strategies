@@ -31,7 +31,7 @@ class VectorStoreHandler:
             os.makedirs(persist_directory)
             print(f"Created persistence directory: {persist_directory}")
 
-        self.api_in_chroma = True
+        self.chroma_compatible_api = True
 
         self.client = chromadb.PersistentClient(path=persist_directory) # 持久化保存
         self.collection_name = collection_name
@@ -44,7 +44,8 @@ class VectorStoreHandler:
                 raise ValueError("api_platform must be specified when use_api_embeddings is True")
 
             if self.is_in_chroma_api_embeddings(api_platform):
-                self.api_in_chroma = True
+                # TODO not tested, not work without environment variables
+                self.chroma_compatible_api = True
                 self.embedding_function = embedding_functions.known_embedding_functions[api_platform](
                     model_name=embedding_model_name
                 )
@@ -52,9 +53,9 @@ class VectorStoreHandler:
                     name=self.collection_name,
                     embedding_function=self.embedding_function 
                 )# with embedding function
-                print(f"Using Api embeddings bound with chromadb with model: {self.embedding_model_name}")
+                print(f"Using Api embeddings (chromadb compatible) bound with model: {self.embedding_model_name}")
             else:
-                self.api_in_chroma = False
+                self.chroma_compatible_api = False
                 self.embedding_function = APIFactory(model_id=embedding_model_name).create_api()
                 self.collection = self.client.get_or_create_collection(
                     name=self.collection_name
@@ -64,12 +65,12 @@ class VectorStoreHandler:
             print(f"Using Api embeddings with model: {self.embedding_model_name}")
         else:
             # local embedding
-            self.api_in_chroma = True
+            self.chroma_compatible_api = True
             self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
                 model_name='all-MiniLM-L6-v2'
             )
             self.embedding_model_name = 'SentenceTransformer-all-MiniLM-L6-v2'
-            print(f"Using SentenceTransformer embeddings with model: {self.embedding_model_name}")
+            print(f"Using embeddings with model: {self.embedding_model_name}")
 
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
@@ -170,24 +171,10 @@ class VectorStoreHandler:
 if __name__ == '__main__':
     # connect to db
     vector_store = VectorStoreHandler(
-        collection_name="rag_chunks_test", 
+        collection_name="test1", 
         persist_directory="db/chroma_db", 
         use_api_embeddings=True, 
         embedding_model_name="default_embedding", 
         api_platform="siliconflow")
 
-    v2 = VectorStoreHandler(
-        collection_name="rag_chunks_test", 
-        persist_directory="db/chroma_db", 
-        use_api_embeddings=False, 
-        embedding_model_name="all-MiniLM-L6-v2", 
-        api_platform="sentence-transformers")
-    
-    v3 = VectorStoreHandler(
-        collection_name="rag_chunks_test", 
-        persist_directory="db/chroma_db", 
-        use_api_embeddings=True,
-        embedding_model_name="xxxx",
-        api_platform="openai"
-    )
     
