@@ -36,6 +36,18 @@ class FileHandler:
             print(f"Error: Could not load test data for file type '{type_name}'. Details missing or invalid.")
             return None
 
+    def get_data_file_name(self, file_type):
+        """
+            get and format the data file name for a given file type.
+        """
+        file_type_details = self.get_file_type_details(file_type)
+        if file_type_details and 'test_file' in file_type_details:
+            path = os.path.basename(file_type_details['test_file'])
+            return os.path.splitext(path)[0]
+        else:
+            print(f"Error: Could not get data file name for file type '{file_type}'. Details missing or invalid.")
+            return None
+
 if __name__ == '__main__':
     # Example usage
     # Adjust the path to config/file_types.yaml if running this script directly from src

@@ -5,29 +5,28 @@ from src.llm_utils.qa import extract_qa_pairs
 from src.llm_utils.response_model import LLMResponseModel
 
 # from sentence_transformers import CrossEncoder
-from src.reranker import Reranker
-from src.vector_store_handler import VectorStoreHandler
+from src.rag_utils.reranker import Reranker
+from src.rag_utils.vector_store_handler import VectorStoreHandler
 
 class LLM_handler:
-    def __init__(self, model_id, config_path="config"):
+    def __init__(self, model_id, config_path="config/llm_info.yaml"):
         self.model_id = model_id
-        self.config_path = config_path
-        self.config_file_path = os.path.join(self.config_path, "llm_info.yaml")
+        self.config_file_path = config_path
 
         self.load_api()
-        self.reranker = None
-        # Attempt to load Cohere API key from llm_info.yaml or environment
-        cohere_api_key = self.llm_api_factory.get_api_key('cohere') # Assuming get_api_key can fetch specific keys
-        if not cohere_api_key:
-            cohere_api_key = os.getenv('COHERE_API_KEY')
+        # self.reranker = None
+        # # Attempt to load Cohere API key from llm_info.yaml or environment
+        # cohere_api_key = self.llm_api_factory.get_api_key('cohere') # Assuming get_api_key can fetch specific keys
+        # if not cohere_api_key:
+        #     cohere_api_key = os.getenv('COHERE_API_KEY')
         
-        if cohere_api_key:
-            try:
-                self.reranker = Reranker(cohere_api_key=cohere_api_key)
-            except ValueError as e:
-                print(f"Warning: Could not initialize Reranker: {e}. Reranking will be skipped.")
-        else:
-            print("Warning: Cohere API key not found. Reranking will be skipped.")
+        # if cohere_api_key:
+        #     try:
+        #         self.reranker = Reranker(cohere_api_key=cohere_api_key)
+        #     except ValueError as e:
+        #         print(f"Warning: Could not initialize Reranker: {e}. Reranking will be skipped.")
+        # else:
+        #     print("Warning: Cohere API key not found. Reranking will be skipped.")
 
     def load_api(self):
         self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path)
@@ -147,45 +146,7 @@ class LLM_handler:
                         self._generate_qa_pairs(original_text, output_file_path, build_strategy)
                 except Exception as e:
                     print(f"Error processing file {filename}: {e}")
-
-    def load_qa_pairs_from_file(self, file_path):
-        """
-        Loads QA pairs from a specified text file.
-        Each Q and A should be on separate lines, prefixed with "Q: " and "A: ".
-        Args:
-            file_path (str): The absolute path to the QA file.
-        Returns:
-            list: A list of dictionaries, where each dictionary is a QA pair {'question': str, 'answer': str}.
-        """
-        qa_pairs = []
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            current_q = None
-            for line in lines:
-                line = line.strip()
-                if line.startswith("Q:"):
-                    current_q = line[3:].strip()
-                elif line.startswith("A:") and current_q:
-                    answer = line[3:].strip()
-                    qa_pairs.append({"question": current_q, "answer": answer})
-                    current_q = None # Reset for the next pair
-                # Blank lines or other lines are ignored
-        except FileNotFoundError:
-            print(f"Error: QA file not found at {file_path}")
-            return []
-        except Exception as e:
-            print(f"Error reading QA file {file_path}: {e}")
-            return []
         
-        if not qa_pairs:
-            print(f"No QA pairs loaded from {file_path}. Ensure format is 'Q: ...' and 'A: ...'")
-        else:
-            print(f"Loaded {len(qa_pairs)} QA pairs from {file_path}")
-        return qa_pairs
-        
-
     def answer_question_rag(self, question_text, vector_store_handler: VectorStoreHandler, 
                               retrieval_n_results=10, reranker_top_n=3, 
                               qa_model_id='default_model', # Model for answering the question
