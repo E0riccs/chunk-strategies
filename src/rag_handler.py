@@ -55,7 +55,7 @@ class RAGHandler:
         safe_strategy_name = self.chunking_strategy_name.replace(' ', '_').lower()
 
         # 为每个文件类型+策略组合创建唯一的collection，避免干扰并允许干净的重新运行
-        collection_name_suffix = f"{safe_file_type_name}_{safe_strategy_name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        collection_name_suffix = f"{safe_file_type_name}_{safe_strategy_name}"
         # 进一步清理collection_name_suffix，ChromaDB有限制
         collection_name_suffix = collection_name_suffix.replace('-', '_')  # 替换连字符
         current_collection_name = f"{vector_store_collection_name_prefix}_{collection_name_suffix}"

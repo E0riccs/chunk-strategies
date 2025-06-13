@@ -100,8 +100,6 @@ class VectorStoreHandler:
             return
 
         if not ids:
-            # Generate unique IDs if not provided, to avoid collisions if re-adding similar content
-            # A more robust ID generation might be needed depending on use case (e.g., hash of content + metadata)
             start_id_num = self.collection.count() # Simplistic way to avoid collision on subsequent calls
             ids = [f"doc_{start_id_num + i}" for i in range(len(chunks))]
         
@@ -112,7 +110,7 @@ class VectorStoreHandler:
 
         try:
             if self.chroma_compatible_api:
-                self.collection.add(
+                self.collection.upsert(
                     documents=chunks,
                     metadatas=metadatas,
                     ids=ids
@@ -123,7 +121,7 @@ class VectorStoreHandler:
                     response = self.embedding_function.get_embedding(chunk)
                     response = self.embedding_function.embed_answer_from_json(response)
                     embeddings.append(extract_embedding_from_json(response[APIResponseModel.RESPONSE_CONTENT]))
-                self.collection.add(
+                self.collection.upsert(
                     documents=chunks,
                     metadatas=metadatas,
                     embeddings= embeddings,
@@ -193,5 +191,7 @@ if __name__ == '__main__':
         use_api_embeddings=True, 
         embedding_model_name="default_embedding", 
         api_platform="siliconflow")
+
+    # TODO 测试向量数据库于此
 
     
