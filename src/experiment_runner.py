@@ -95,25 +95,23 @@ class ExperimentRunner:
             embedding_model_name=embedding_model_name,
             api_platform=embedding_api_platform
         )
-        self.rag_handler.add_documents_to_vector_store(
-            chunks=chunks,
-            original_text_length=len(original_text)
-        )
+        # self.rag_handler.add_documents_to_vector_store(
+        #     chunks=chunks,
+        #     original_text_length=len(original_text)
+        # )
 
         # 4. RAG QA and Evaluation
-        # Load test questions from file_type_details
-        test_questions_source = file_type_details.get('test_questions', [])
-        test_questions_for_rag = [] # This will store list of dicts: {'question': ..., 'answer': ...}
-
-        if isinstance(test_questions_source, str): # If it's a path to a QA file
-            qa_file_path = self._abs_path(test_questions_source) # Ensure absolute path
-            print(f"Attempting to load test questions from file: {qa_file_path}")
+        # Load QAs from QA file
+        qa_file_path = 'data/qa_pairs/' + self.file_handler.get_data_file_name(file_type_name) + '_qa_pairs.txt'
+        test_questions_for_rag = [] # List of dicts: {'question': ..., 'answer': ...}
+        if isinstance(qa_file_path, str): # If it's a path to a QA file
+            qa_file_path = self._abs_path(qa_file_path)
+            print(f"Attempting to load QAs from file: {qa_file_path}")
             # Use the RAG LLM handler to load QA pairs
-            loaded_qas = self.llm_handler_for_rag.load_qa_pairs_from_file(qa_file_path)
-            test_questions_for_rag = loaded_qas
-        elif isinstance(test_questions_source, list):
+            test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
+        elif isinstance(qa_file_path, list):
             # Handles list of strings (questions only) or list of dicts (q/a pairs)
-            for item in test_questions_source:
+            for item in qa_file_path:
                 if isinstance(item, str):
                     test_questions_for_rag.append({'question': item, 'answer': None}) # No reference answer
                 elif isinstance(item, dict) and 'question' in item:
@@ -124,14 +122,15 @@ class ExperimentRunner:
             print(f"Warning: 'test_questions' format in file_types.yaml for {file_type_name} is not recognized or is empty. RAG QA will be skipped.")
 
         # 5. Answer the question with rag
-        ans_qa = self.rag_handler.answer_question(
-            question_text=test_questions_for_rag[0]['question'],
-            retrieval_n_results=10,
-            reranker_top_n=3,
-            vector_store_filter=None,
-            qa_model_id='default_model',
-            reranker_method_name=reranker_method_name
-        )
+        for group in test_questions_for_rag:
+            ans_qa = self.rag_handler.answer_question(
+                question_text=group['question'],
+                retrieval_n_results=10,
+                reranker_top_n=3,
+                # vector_store_filter=None,
+                qa_model_id='default_model',
+                reranker_method_name=reranker_method_name
+            )
 
 
         # 6. Evaluate chunking using Evaluator
@@ -224,6 +223,44 @@ class ExperimentRunner:
             print(f"\nSuccessfully saved experiment summary to: {summary_filepath}")
         except IOError as e:
             print(f"Error saving summary CSV file {summary_filepath}: {e}")
+
+    def load_qa_pairs_from_file(self, file_path):
+        """
+        Loads QA pairs from a specified text file.
+        Each Q and A should be on separate lines, prefixed with "Q: " and "A: ".
+        Args:
+            file_path (str): The absolute path to the QA file.
+        Returns:
+            list: A list of dictionaries, where each dictionary is a QA pair {'question': str, 'answer': str}.
+        """
+        qa_pairs = []
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            current_q = None
+            for line in lines:
+                line = line.strip()
+                if line.startswith("Q:"):
+                    current_q = line[3:].strip()
+                elif line.startswith("A:") and current_q:
+                    answer = line[3:].strip()
+                    qa_pairs.append({"question": current_q, "answer": answer})
+                    current_q = None # Reset for the next pair
+                # Blank lines or other lines are ignored
+        except FileNotFoundError:
+            print(f"Error: QA file not found at {file_path}")
+            return []
+        except Exception as e:
+            print(f"Error reading QA file {file_path}: {e}")
+            return []
+        
+        if not qa_pairs:
+            print(f"No QA pairs loaded from {file_path}. Ensure format is 'Q: ...' and 'A: ...'")
+        else:
+            print(f"Loaded {len(qa_pairs)} QA pairs from {file_path}")
+        return qa_pairs
+
 
 if __name__ == '__main__':
     # IMPORTANT: Set your OPENAI_API_KEY environment variable for LLM evaluation

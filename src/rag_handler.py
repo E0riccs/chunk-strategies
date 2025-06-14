@@ -4,6 +4,9 @@ import uuid
 
 from src.rag_utils.vector_store_handler import VectorStoreHandler
 from src.rag_utils.reranker import Reranker
+from src.llm_handler import LLM_handler
+
+from src.rag_utils.response_model import RagAnswerModel
 
 class RAGHandler:
     """
@@ -15,7 +18,8 @@ class RAGHandler:
                 reranker_model_name='default_model'):
         """
         1. 完善向量数据库配置，随实验运行建立实例
-        2. 完善重排序配置，随实验运行建立实例
+        2. 随实验运行建立重排序实例
+        3. 随实验运行建立问答 LLM 实例
 
         Args:
             vector_store_base_persist_dir (str): 向量数据库基础持久化目录
@@ -23,7 +27,6 @@ class RAGHandler:
 
         # 向量数据库
         self.vector_store_base_persist_dir = vector_store_base_persist_dir
-
 
     def _setup_vector_store(self,
                             file_type_name: str,
@@ -118,104 +121,84 @@ class RAGHandler:
     def answer_question(self, 
                         question_text: str, 
                         retrieval_n_results: int = 10, 
-                        reranker_top_n: int = 3,
-                        vector_store_filter: dict = None,
                         qa_model_id: str = 'default_model',
+                        if_rerank: bool = False,
+                        reranker_top_n: int = 3,
                         reranker_method_name: str = 'default_reranker') -> dict:
         """
         Answers a question using the RAG pipeline: retrieve, (optionally) rerank, then generate answer.
+        Filter documents is not available in this version.
 
         Args:
             question_text (str): The question to answer.
             retrieval_n_results (int): Number of documents to retrieve from vector store.
+            if_rerank (bool): Whether to rerank retrieved documents.
             reranker_top_n (int): Number of documents to keep after reranking. Only used if reranker is available.
-            vector_store_filter (dict, optional): Filter for vector store retrieval.
             qa_model_id (str): The model ID to be used by LLM_handler for generating the answer.
+            reranker_method_name (str): The method name to be used by Reranker for reranking.
 
         Returns:
             dict: A dictionary containing the final answer, context, and other details.
         """
         if not question_text:
             print("Error: Question text cannot be empty.")
-            return {
-                "final_answer": "Error: No question provided.",
-                "retrieved_documents_count": 0,
-                "reranked_documents_count": 0,
-                "context_for_answer": ""
-            }
+            return RagAnswerModel.create_response(
+                final_answer="Error: No question provided.",
+                retrieved_documents_count=0,
+                reranked_documents_count=0,
+                context_for_answer=""
+            )
 
         # 1. Retrieve documents
         print(f"Retrieving documents for question: '{question_text}'")
         retrieved_docs_result = self.vector_store_handler.query_documents(
             query_text=question_text,
-            n_results=retrieval_n_results,
-            where_filter=vector_store_filter,
-            include=["documents", "metadatas"] # Ensure documents are included
+            n_results=retrieval_n_results
         )
         
         retrieved_documents = []
         if retrieved_docs_result and retrieved_docs_result.get('documents') and retrieved_docs_result['documents'][0]:
             retrieved_documents = retrieved_docs_result['documents'][0]
-            print(f"Retrieved {len(retrieved_documents)} documents from vector store.")
         else:
-            print("No documents retrieved from vector store.")
-            return {
-                "final_answer": "Could not retrieve relevant documents to answer the question.",
-                "retrieved_documents_count": 0,
-                "reranked_documents_count": 0,
-                "context_for_answer": ""
-            }
+            return RagAnswerModel.create_response(
+                final_answer="Could not retrieve relevant documents to answer the question.",
+                retrieved_documents_count=0,
+                reranked_documents_count=0,
+                context_for_answer=""
+            )
 
         # 2. Rerank documents (if reranker is available)
-        self._setup_reranker(reranker_model_name)
-        context_for_llm = retrieved_documents
-        reranked_documents_count = 0
-        if self.reranker and retrieved_documents:
-            print(f"Reranking {len(retrieved_documents)} documents...")
-            reranked_docs = self.reranker.rerank_documents(
-                query=question_text,
-                documents=retrieved_documents,
-                top_n=reranker_top_n,
-                return_documents=True
-            )
+        # TODO: reranker is not tested in this version
+        if if_rerank:
+            self._setup_reranker(reranker_method_name)
+            documents_count = 0
+            if self.reranker and retrieved_documents:
+                print(f"Reranking {len(retrieved_documents)} documents...")
+                reranked_docs = self.reranker.rerank_documents(
+                    query=question_text,
+                    documents=retrieved_documents,
+                    top_n=reranker_top_n,
+                    return_documents=True
+                )
             if reranked_docs:
                 context_for_llm = reranked_docs
-                reranked_documents_count = len(reranked_docs)
-                print(f"Reranked down to {len(context_for_llm)} documents.")
+                documents_count = len(reranked_docs)
+                print(f"Reranked down to {documents_count} documents.")
             else:
+                context_for_llm = retrieved_documents
+                documents_count = len(context_for_llm)
                 print("Reranking did not return any documents. Using original retrieved documents.")
-        elif not self.reranker:
+        else:
+            context_for_llm = retrieved_documents
+            documents_count = len(context_for_llm)
             print("Reranker not available. Skipping reranking step.")
         
         # 3. Generate answer using LLM
-        print(f"Generating answer using LLM (model: {qa_model_id}) with {len(context_for_llm)} documents as context...")
-        
-        # The llm_handler.answer_question_with_context method needs to be defined or adapted.
-        # For now, let's assume it takes the question and a list of context strings.
-        # This is a placeholder for where the actual LLM call in llm_handler would be invoked.
-        # We need to ensure llm_handler has a method that fits this RAG flow.
-        # The original `answer_question_rag` was in `llm_handler`, we are moving its logic here.
+        chat_llm_handler = LLM_handler(model_id = qa_model_id)
 
-        prompt = self.llm_handler._load_prompt("RAGAnswer") # Assuming a RAG-specific prompt
-        if not prompt:
-            print("Warning: RAGAnswer prompt not found. Using a generic approach.")
-            # Fallback prompt or structure if specific RAG prompt is missing
-            context_str = "\n\n---\n\n".join(context_for_llm)
-            user_content = f"Question: {question_text}\n\nContext:\n{context_str}\n\nAnswer:"
-        else:
-            context_str = "\n\n---\n\n".join(context_for_llm)
-            # Use the build_content method from llm_handler if it's suitable
-            user_content = self.llm_handler.build_content(prompt, original_text=context_str, question=question_text)
-            # Adjust build_content or create a new method in llm_handler for RAG-specific prompt formatting
-            # For example, the prompt might have placeholders like {{question}} and {{context}}
-            user_content = prompt.replace("{{question}}", question_text).replace("{{context}}", context_str)
+        print(f"Generating answer using LLM (model: {qa_model_id}) with {documents_count} documents as context...")
 
-        # Use the specified qa_model_id for this call
-        # This requires llm_handler to be able to switch models or use a specific one for a call
-        # For simplicity, let's assume llm_handler's current model is used, or it handles model switching internally.
-        # If llm_handler needs to be re-initialized or have a method to set model temporarily, that's an extension.
-        raw_llm_response = self.llm_handler._call_llm(user_content) # Using the _call_llm method
-        final_answer = self.llm_handler.api.answer_from_json(raw_llm_response) # Assuming this extracts the answer string
+        answer = chat_llm_handler.chat(question = question_text, document = context_for_llm, task = "RAGAnswer") # Assuming a RAG-specific prompt
         
         # If answer_from_json returns a dict, extract the relevant part
         if isinstance(final_answer, dict) and 'answer' in final_answer:

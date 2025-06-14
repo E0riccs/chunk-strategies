@@ -9,7 +9,7 @@ from src.llm_utils.apis import siliconflow
 from src.utils import load_yaml_config
 
 class APIFactory:
-    def __init__(self, model_id, config_path='config/llm_info.yaml'):
+    def __init__(self, model_id, config_path='config'):
         """
         Initialize API client.
 
@@ -22,7 +22,7 @@ class APIFactory:
         """
 
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        abs_config_path = os.path.join(project_root, config_path)
+        abs_config_path = os.path.join(project_root, config_path + '/llm_info.yaml')
 
         self.model_id = model_id
         self.config = load_yaml_config(abs_config_path)
@@ -55,7 +55,7 @@ if __name__ == '__main__':
         # Adjust the config_path to be relative to the project root when running this script directly.
         json_schema = {}
 
-        api = APIFactory(config_path='config/llm_info.yaml', model_id='model_gen_qa2').create_api()
+        api = APIFactory(config_path='config', model_id='model_gen_qa2').create_api()
         
         # Make a chat request
         user_query = "你觉得LLM相关技术在2025年的发展方向是什么？请用100字描述"

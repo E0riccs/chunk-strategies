@@ -4,29 +4,12 @@ from src.llm_utils.api_factory import APIFactory
 from src.llm_utils.qa import extract_qa_pairs
 from src.llm_utils.response_model import LLMResponseModel
 
-# from sentence_transformers import CrossEncoder
-from src.rag_utils.reranker import Reranker
-from src.rag_utils.vector_store_handler import VectorStoreHandler
-
 class LLM_handler:
-    def __init__(self, model_id, config_path="config/llm_info.yaml"):
+    def __init__(self, model_id, config_path="config"):
         self.model_id = model_id
         self.config_file_path = config_path
 
         self.load_api()
-        # self.reranker = None
-        # # Attempt to load Cohere API key from llm_info.yaml or environment
-        # cohere_api_key = self.llm_api_factory.get_api_key('cohere') # Assuming get_api_key can fetch specific keys
-        # if not cohere_api_key:
-        #     cohere_api_key = os.getenv('COHERE_API_KEY')
-        
-        # if cohere_api_key:
-        #     try:
-        #         self.reranker = Reranker(cohere_api_key=cohere_api_key)
-        #     except ValueError as e:
-        #         print(f"Warning: Could not initialize Reranker: {e}. Reranking will be skipped.")
-        # else:
-        #     print("Warning: Cohere API key not found. Reranking will be skipped.")
 
     def load_api(self):
         self.llm_api_factory = APIFactory(model_id=self.model_id, config_path=self.config_file_path)
@@ -35,8 +18,11 @@ class LLM_handler:
     def _load_prompt(self, task):
         '''
         加载原始 Prompt
+
+        args:
+            task (str): 任务名称, 包括 RAGAnswer, GenQAs ...
         '''
-        prompt_file_path = os.path.join(self.config_path, "prompts.md")
+        prompt_file_path = os.path.join(self.config_file_path, "prompts.md")
 
         try:
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
@@ -45,7 +31,7 @@ class LLM_handler:
                 for line in f:
                     if line.startswith("##"):
                         if line.strip() == f"## {task}":
-                            # 读取下一行，直到遇到新的一级标题
+                            # 读取下一行，直到遇到新的标题
                             next_line = f.readline()
                             while not next_line.startswith("##"):
                                 prompt += next_line
@@ -58,11 +44,24 @@ class LLM_handler:
         except Exception as e:
             print(f"Error loading prompt file: {e}")
 
-    def build_content(self, prompt, original_text, **kwargs):
+    def build_content(self, prompt, original_text = '', **kwargs):
         '''
-        根据原始提示词和附加信息构建最终的用户输入内容
+        根据原始提示词和附加信息，经过替换等操作得到最终的用户输入内容。
+        替换形式：{key_word}
+        
+        args:
+            prompt (str): 原始提示词
+            original_text (str): 原始文本, 直接添加到后部
+            **kwargs: 附加信息，变量名应该与提示词中的 {key_word} 一致
+                     如果value是list类型，会自动转换为换行分隔的字符串
         '''
-        return prompt + "\n\n" + original_text
+        for key, value in kwargs.items():
+            # 如果value是list类型，转换为换行分隔的字符串
+            if isinstance(value, list):
+                value = '\n'.join(str(item) for item in value)
+            prompt = prompt.replace(f"{key}", str(value))
+
+        return prompt + '/n/n' + original_text
 
     def _call_llm(self, user_content):
         '''
@@ -92,7 +91,7 @@ class LLM_handler:
         #     "keywords": "array (提取的关键词)"
         # }
         prompt = self._load_prompt("GenQAs")
-        raw_ans = self._call_llm(self.build_content(prompt, original_text)) # 传递加载的prompt和原文
+        raw_ans = self._call_llm(self.build_content(prompt=prompt, original_text=original_text)) # 传递加载的prompt和原文
         raw_ans = self.api.answer_from_json(raw_ans)
 
         qa_pairs = extract_qa_pairs(raw_ans[LLMResponseModel.ANS_CONTENT])
@@ -147,111 +146,28 @@ class LLM_handler:
                 except Exception as e:
                     print(f"Error processing file {filename}: {e}")
         
-    def answer_question_rag(self, question_text, vector_store_handler: VectorStoreHandler, 
-                              retrieval_n_results=10, reranker_top_n=3, 
-                              qa_model_id='default_model', # Model for answering the question
-                              vector_store_filter=None):
+    def chat(self, input_text= '', task='Normal', **kwargs):
         """
         Answers a single question using a RAG pipeline: retrieve, rerank, then generate answer.
 
         Args:
-            question_text (str): The question to answer.
-            vector_store_handler (VectorStoreHandler): Instance for retrieving documents.
-            retrieval_n_results (int): Number of documents to retrieve from vector store.
-            reranker_top_n (int): Number of documents to keep after reranking.
-            qa_model_id (str): The model ID to use for generating the final answer.
-            vector_store_filter (dict, optional): Filter for vector store retrieval.
-
-        Returns:
-            dict: Contains the question, retrieved docs, reranked docs, and the final answer.
+            input_text (str): The input text to chat.
+            task (str): The task (RAGAnswer, GenQAs, etc.) of this chat.
+            **kwargs: Additional keyword arguments to pass to the build_content method.
         """
-        """
-        使用大模型（small）对分片结果，进行reranker后，回答Qs；
-        Args:
-            chunks (list of str): 文本分片列表。
-            questions (list of str): 问题列表。
-        Returns:
-            list of dict: 每个字典包含 'question' 和 'reranked_answer'。
-        """
-        print(f"\nProcessing RAG for question: '{question_text}'")
+
+        prompt = self._load_prompt(task)
+        if not prompt:
+            print(f"Warning: Prompt for task '{task}' not found. Using a generic approach.")
+            prompt = " "
+
+        user_content = self.build_content(prompt=prompt, **kwargs)
         
-        # 1. Retrieve documents from vector store
-        retrieved_results = vector_store_handler.query_documents(
-            query_text=question_text, 
-            n_results=retrieval_n_results,
-            where_filter=vector_store_filter
-        )
-        retrieved_docs = retrieved_results.get('documents', [[]])[0]
-        retrieved_metadatas = retrieved_results.get('metadatas', [[]])[0]
+        raw_response = self._call_llm(user_content)
+        response = self.api.answer_from_json(raw_response)[LLMResponseModel.ANS_CONTENT]
 
-        if not retrieved_docs:
-            print("No documents retrieved from vector store.")
-            return {
-                "question": question_text, 
-                "retrieved_documents": [], 
-                "reranked_documents": [],
-                "final_answer": "Could not retrieve any relevant documents from the vector store.",
-                "context_for_answer": ""
-            }
-        print(f"Retrieved {len(retrieved_docs)} documents from vector store.")
+        return response
 
-        # 2. Rerank the retrieved documents
-        reranked_docs_content = retrieved_docs
-        if self.reranker:
-            print(f"Reranking {len(retrieved_docs)} documents...")
-            # Pass only document content to reranker
-            reranked_docs_content = self.reranker.rerank_documents(question_text, retrieved_docs, top_n=reranker_top_n)
-            if not reranked_docs_content:
-                print("Reranking returned no documents. Using original retrieved documents.")
-                reranked_docs_content = retrieved_docs[:reranker_top_n] # Fallback
-            else:
-                print(f"Reranked down to {len(reranked_docs_content)} documents.")
-        else:
-            print("Skipping reranking as Reranker is not available. Using top N retrieved documents.")
-            reranked_docs_content = retrieved_docs[:reranker_top_n]
-
-        # 3. Prepare context and generate answer using LLM
-        context_for_answer = "\n\n---\n\n".join(reranked_docs_content)
-        
-        # Load prompt for QA
-        qa_prompt_template = self._load_prompt("RAGQA") # Assuming a new prompt type for RAG QA
-        if not qa_prompt_template:
-            print("Warning: RAGQA prompt not found. Using a default prompt structure.")
-            # Fallback prompt if RAGQA is not defined in prompts.md
-            user_content = f"Based on the following context, please answer the question.\n\nContext:\n{context_for_answer}\n\nQuestion: {question_text}\n\nAnswer:"
-        else:
-            # Build content using the loaded prompt, providing context and question
-            # The build_content method might need to be flexible or a new one created for this
-            user_content = qa_prompt_template.replace("{context}", context_for_answer).replace("{question}", question_text)
-
-        # Use the specified or default LLM for answering
-        # We need to ensure the APIFactory can create an API instance for 'qa_model_id'
-        # For simplicity, let's assume the main 'self.api' can be used if qa_model_id is default,
-        # or a new one is fetched if qa_model_id is different.
-        qa_api = self.api # Default to the handler's main API
-        if qa_model_id != self.model_id:
-            try:
-                qa_api_factory = APIFactory(model_id=qa_model_id, config_path=self.config_file_path)
-                qa_api = qa_api_factory.create_api()
-                print(f"Using LLM '{qa_model_id}' for QA.")
-            except Exception as e:
-                print(f"Warning: Could not load LLM '{qa_model_id}' for QA. Falling back to default. Error: {e}")
-        
-        print("Generating final answer using LLM...")
-        llm_response_raw = qa_api.send_message(user_content)
-        final_answer = qa_api.answer_from_json(llm_response_raw).get(LLMResponseModel.ANS_CONTENT, "Error extracting answer.")
-        
-        print(f"LLM Answer: {final_answer}")
-
-        return {
-            "question": question_text,
-            "retrieved_documents_count": len(retrieved_docs),
-            "retrieved_documents_preview": [doc[:100] + "..." for doc in retrieved_docs[:3]], # Preview of retrieved
-            "reranked_documents_count": len(reranked_docs_content),
-            "reranked_documents_content": reranked_docs_content, # Content of reranked docs used for context
-            "context_for_answer": context_for_answer,
-            "final_answer": final_answer
-        }
 
     def evaluate_rag_answer(self, question, generated_answer, reference_answer=None, eval_model_id='default_model'):
         """

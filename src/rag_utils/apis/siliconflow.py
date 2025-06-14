@@ -27,7 +27,7 @@ class SiliconflowAPI:
         }
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
-        print("Response with code: ", response.status_code)
+        print("Embedding response with code: ", response.status_code)
 
         return response
 
@@ -66,13 +66,13 @@ class SiliconflowAPI:
         }
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
-        print("Response with code: ", response.status_code)
+        print("Rerank response with code: ", response.status_code)
 
         return response
 
 
 
-    def embed_answer_from_json(self, json_response):
+    def embed_result_from_json(self, json_response):
         """
             Parse the JSON response from the embedding API.
             In this function, we do not extract the real response content (e.g. QAs) but only standardize the response format.

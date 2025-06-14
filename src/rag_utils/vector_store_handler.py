@@ -119,7 +119,7 @@ class VectorStoreHandler:
                 embeddings = []
                 for chunk in chunks:
                     response = self.embedding_function.get_embedding(chunk)
-                    response = self.embedding_function.embed_answer_from_json(response)
+                    response = self.embedding_function.embed_result_from_json(response)
                     embeddings.append(extract_embedding_from_json(response[APIResponseModel.RESPONSE_CONTENT]))
                 self.collection.upsert(
                     documents=chunks,
@@ -153,13 +153,22 @@ class VectorStoreHandler:
             return {}
         
         try:
-            results = self.collection.query(
-                query_texts=[query_text],
-                n_results=min(n_results, self.collection.count()), # Cannot request more results than available
-                where=where_filter,
-                include=include
-            )
-            # print(f"Query returned {len(results.get('documents', [[]])[0])} results.")
+            if self.chroma_compatible_api:
+                results = self.collection.query(
+                    query_texts=[query_text],
+                    n_results=min(n_results, self.collection.count()),
+                    include=include
+                )
+            else:
+                query_embedding = self.embedding_function.get_embedding(query_text)
+                query_embedding = self.embedding_function.embed_result_from_json(query_embedding)
+                query_embedding = extract_embedding_from_json(query_embedding[APIResponseModel.RESPONSE_CONTENT])
+                results = self.collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=min(n_results, self.collection.count()),
+                    include=include
+                )
+            print(f"Query returned {len(results.get('documents', [[]])[0])} results.")
             return results
         except Exception as e:
             print(f"Error querying documents from ChromaDB: {e}")
