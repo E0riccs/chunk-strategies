@@ -95,7 +95,8 @@ class LLM_handler:
         raw_ans = self._call_llm(self.build_content(prompt=prompt, original_text=original_text)) # 传递加载的prompt和原文
         raw_ans = self.api.answer_from_json(raw_ans)
 
-        qa_pairs = extract_qa_pairs(raw_ans[LLMResponseModel.ANS_CONTENT])
+        # 或者使用新的 Pydantic 模型字段名（推荐）
+        qa_pairs = extract_qa_pairs(raw_ans.ans_content)
 
         try:
             if not qa_pairs:
@@ -170,7 +171,7 @@ class LLM_handler:
             print(f"Warning: Invalid prompt keywords: {e}. Using raw kwargs.")
         
         raw_response = self._call_llm(user_content)
-        response = self.api.answer_from_json(raw_response)[LLMResponseModel.ANS_CONTENT]
+        response = self.api.answer_from_json(raw_response).ans_content
 
         return response
 

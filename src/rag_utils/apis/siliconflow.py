@@ -97,7 +97,7 @@ class SiliconflowAPI:
             embedding = None
         
         # Use the standardized response model
-        return APIResponseModel.create_response(
+        return APIResponseModel(
             tokens_used=tokens_used,
             model=embedding_model,
             api_platform=llm_platform,

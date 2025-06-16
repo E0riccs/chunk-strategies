@@ -3,7 +3,6 @@ import os
 import chromadb
 from chromadb.utils import embedding_functions
 from src.rag_utils.embeddings import extract_embedding_from_json
-from src.rag_utils.rag_model import APIResponseModel
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -120,7 +119,7 @@ class VectorStoreHandler:
                 for chunk in chunks:
                     response = self.embedding_function.get_embedding(chunk)
                     response = self.embedding_function.embed_result_from_json(response)
-                    embeddings.append(extract_embedding_from_json(response[APIResponseModel.RESPONSE_CONTENT]))
+                    embeddings.append(extract_embedding_from_json(response.response_content))
                 self.collection.upsert(
                     documents=chunks,
                     metadatas=metadatas,
@@ -162,7 +161,7 @@ class VectorStoreHandler:
             else:
                 query_embedding = self.embedding_function.get_embedding(query_text)
                 query_embedding = self.embedding_function.embed_result_from_json(query_embedding)
-                query_embedding = extract_embedding_from_json(query_embedding[APIResponseModel.RESPONSE_CONTENT])
+                query_embedding = extract_embedding_from_json(query_embedding.response_content)
                 results = self.collection.query(
                     query_embeddings=[query_embedding],
                     n_results=min(n_results, self.collection.count()),

@@ -123,7 +123,7 @@ class ExperimentRunner:
                 qa_model_id='default_model',
                 reranker_method_name=reranker_method_name
             )
-            rag_results.append(ans_qa)
+            rag_results.append(ans_qa.final_answer)
 
 
         # 6. Evaluate chunking using Evaluator

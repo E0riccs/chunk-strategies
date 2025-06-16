@@ -88,10 +88,12 @@ class SiliconflowAPI:
             thinking_content = None
         
         # Use the standardized response model
-        return LLMResponseModel.create_response(
+        response = LLMResponseModel(
             tokens_used=tokens_used,
             gen_model=gen_model,
             llm_platform=llm_platform,
             ans_content=ans_content,
             thinking_content=thinking_content
         )
+
+        return response

@@ -143,7 +143,7 @@ class RAGHandler:
         """
         if not question_text:
             print("Error: Question text cannot be empty.")
-            return RagAnswerModel.create_response(
+            return RagAnswerModel(
                 final_answer="Error: No question provided.",
                 retrieved_documents_count=0,
                 reranked_documents_count=0,
@@ -161,7 +161,7 @@ class RAGHandler:
         if retrieved_docs_result and retrieved_docs_result.get('documents') and retrieved_docs_result['documents'][0]:
             retrieved_documents = retrieved_docs_result['documents'][0]
         else:
-            return RagAnswerModel.create_response(
+            return RagAnswerModel(
                 final_answer="Could not retrieve relevant documents to answer the question.",
                 retrieved_documents_count=0,
                 reranked_documents_count=0,
@@ -206,7 +206,8 @@ class RAGHandler:
         answer = chat_llm_handler.chat(task="RAGAnswer", **prompt_params.model_dump(exclude_none=True))
         print(f"Generated final answer: {answer[:100]}...")
 
-        return RagAnswerModel.create_response(
+        # 创建标准化的响应
+        return RagAnswerModel(
             final_answer=answer,
             retrieved_documents_count=len(retrieved_documents),
             reranked_documents_count=reranked_documents_count,
