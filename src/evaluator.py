@@ -78,15 +78,20 @@ Chunks (first 50 chars of each, up to 5 chunks):
             print(f"Error during LLM API call: {e}")
             return None
 
-    def evaluate(self, original_text, chunks, processing_time):
-        """Calculates all evaluation metrics."""
-        start_eval_time = time.time()
+    def evaluate(self, gen_qas, std_qas):
+        """
+            Calculates all evaluation metrics.
 
-        avg_cosine_sim = self._calculate_cosine_similarity(original_text, chunks)
-        llm_score = self._get_llm_evaluation(original_text, chunks)
+            Args:
+                gen_qas (list of dict): Generated QAs.
+                std_qas (list of dict): Standard QAs.
+            
+            Returns:
+                metrics (dict): Evaluation metrics.
 
-        end_eval_time = time.time()
-        evaluation_duration = end_eval_time - start_eval_time
+        """
+        avg_cosine_sim = self._calculate_cosine_similarity(std_qas, gen_qas)
+        llm_score = self._get_llm_evaluation(std_qas, gen_qas)
 
         metrics = {
             'total_processing_time_seconds': round(processing_time, 4),
