@@ -7,3 +7,4 @@ pyyaml
 sentence-transformers
 langchain-community
 langchain-openai
+pydantic

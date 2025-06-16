@@ -1,6 +1,6 @@
 import requests
 import json
-from ..response_model import APIResponseModel
+from ..rag_model import APIResponseModel
 
 class SiliconflowAPI:
     def __init__(self, model_id, url, api_key, model_name, **kwargs):

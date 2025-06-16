@@ -3,7 +3,7 @@ import os
 import chromadb
 from chromadb.utils import embedding_functions
 from src.rag_utils.embeddings import extract_embedding_from_json
-from src.rag_utils.response_model import APIResponseModel
+from src.rag_utils.rag_model import APIResponseModel
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))

@@ -2,7 +2,8 @@
 LLM API Response Model.
 This module defines the standardized response format for all LLM API platforms.
 """
-from typing import Optional, Dict, Any # 建议也导入 Dict 和 Any 用于返回类型提示
+from typing import Optional, Dict, Any, List, Union
+from pydantic import BaseModel, Field
 
 class LLMResponseModel:
     # Standard keys for LLM response dictionary
@@ -73,4 +74,14 @@ class LLMResponseModel:
             'ANS_CONTENT': cls.ANS_CONTENT,
             'THINKING_CONTENT': cls.THINKING_CONTENT
         }
+
+class PromptKeywordsModel(BaseModel):
+    """Pydantic model for standardizing prompt keywords.
     
+    This model defines the standard keywords that can be used in prompts,
+    ensuring type safety and validation when passing parameters to LLM calls.
+    """
+    document: Optional[Union[str, List[str]]] = Field(None, description="Document content for context")
+    question: Optional[str] = Field(None, description="Question to be answered")
+    std: Optional[str] = Field(None, description="Standard content for comparison")
+    judge: Optional[str] = Field(None, description="Judge or evaluation criteria")

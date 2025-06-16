@@ -1,5 +1,6 @@
 """
 Embedding/Reranker API Response Model.
+Prompt keyword replace Model.
 This module defines the standardized response format for all API platforms.
 """
 
@@ -49,6 +50,8 @@ class APIResponseModel:
     
 class RagAnswerModel:
     # Standard keys for RAG answer dictionary
+    # Include the details that needed in experiment result
+
     FINAL_ANSWER: str = 'final_answer' # 最终答案
     RETRIEVED_DOCUMENTS_COUNT: str = 'retrieved_documents_count' # 检索到的文档数量
     RERANKED_DOCUMENTS_COUNT: str = 'reranked_documents_count' # 重排序后的文档数量
@@ -88,4 +91,5 @@ class RagAnswerModel:
             'RERANKED_DOCUMENTS_COUNT': cls.RERANKED_DOCUMENTS_COUNT,
             'CONTEXT_FOR_ANSWER': cls.CONTEXT_FOR_ANSWER
         }
+    
     

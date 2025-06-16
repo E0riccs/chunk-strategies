@@ -1,6 +1,6 @@
 import requests
 import json
-from ..response_model import LLMResponseModel
+from ..llm_model import LLMResponseModel
 
 class SiliconflowAPI:
     def __init__(self, model_id, url, api_key, model_name, **kwargs):

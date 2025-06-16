@@ -6,7 +6,8 @@ from src.rag_utils.vector_store_handler import VectorStoreHandler
 from src.rag_utils.reranker import Reranker
 from src.llm_handler import LLM_handler
 
-from src.rag_utils.response_model import RagAnswerModel
+from src.rag_utils.rag_model import RagAnswerModel
+from src.llm_utils.llm_model import PromptKeywordsModel
 
 class RAGHandler:
     """
@@ -182,39 +183,35 @@ class RAGHandler:
                 )
             if reranked_docs:
                 context_for_llm = reranked_docs
-                documents_count = len(reranked_docs)
+                reranked_documents_count = len(reranked_docs)
                 print(f"Reranked down to {documents_count} documents.")
             else:
                 context_for_llm = retrieved_documents
-                documents_count = len(context_for_llm)
+                reranked_documents_count = len(context_for_llm)
                 print("Reranking did not return any documents. Using original retrieved documents.")
         else:
             context_for_llm = retrieved_documents
-            documents_count = len(context_for_llm)
+            reranked_documents_count = 0
             print("Reranker not available. Skipping reranking step.")
         
         # 3. Generate answer using LLM
         chat_llm_handler = LLM_handler(model_id = qa_model_id)
 
-        print(f"Generating answer using LLM (model: {qa_model_id}) with {documents_count} documents as context...")
-
-        answer = chat_llm_handler.chat(question = question_text, document = context_for_llm, task = "RAGAnswer") # Assuming a RAG-specific prompt
+        print(f"Generating answer using LLM (model: {qa_model_id}) with {reranked_documents_count} documents as context...")
         
-        # If answer_from_json returns a dict, extract the relevant part
-        if isinstance(final_answer, dict) and 'answer' in final_answer:
-            final_answer = final_answer['answer']
-        elif isinstance(final_answer, dict) and 'response' in final_answer: # Common key for response text
-            final_answer = final_answer['response']
-        # Add more robust extraction if needed based on actual LLM response structure
+        prompt_params = PromptKeywordsModel(
+            question=question_text,
+            document=context_for_llm
+        )
+        answer = chat_llm_handler.chat(task="RAGAnswer", **prompt_params.model_dump(exclude_none=True))
+        print(f"Generated final answer: {answer[:100]}...")
 
-        print(f"Generated final answer: {final_answer[:100]}...")
-
-        return {
-            "final_answer": final_answer,
-            "retrieved_documents_count": len(retrieved_documents),
-            "reranked_documents_count": reranked_documents_count,
-            "context_for_answer": context_for_llm # or context_str for the string version
-        }
+        return RagAnswerModel.create_response(
+            final_answer=answer,
+            retrieved_documents_count=len(retrieved_documents),
+            reranked_documents_count=reranked_documents_count,
+            context_for_answer=context_for_llm
+        )
 
 # Example Usage (Conceptual - requires actual instances of handlers)
 if __name__ == '__main__':

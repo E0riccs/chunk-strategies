@@ -3,11 +3,12 @@ import time
 import datetime
 import yaml
 import pandas as pd
+import random
 
 from src.chunker import Chunker
 from src.evaluator import Evaluator
 from src.file_handler import FileHandler
-from src.rag_handler import RAGHandler # Import RAGHandler
+from src.rag_handler import RAGHandler
 from src.utils import load_yaml_config
 
 class ExperimentRunner:
@@ -104,24 +105,15 @@ class ExperimentRunner:
         # Load QAs from QA file
         qa_file_path = 'data/qa_pairs/' + self.file_handler.get_data_file_name(file_type_name) + '_qa_pairs.txt'
         test_questions_for_rag = [] # List of dicts: {'question': ..., 'answer': ...}
-        if isinstance(qa_file_path, str): # If it's a path to a QA file
-            qa_file_path = self._abs_path(qa_file_path)
-            print(f"Attempting to load QAs from file: {qa_file_path}")
-            # Use the RAG LLM handler to load QA pairs
-            test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
-        elif isinstance(qa_file_path, list):
-            # Handles list of strings (questions only) or list of dicts (q/a pairs)
-            for item in qa_file_path:
-                if isinstance(item, str):
-                    test_questions_for_rag.append({'question': item, 'answer': None}) # No reference answer
-                elif isinstance(item, dict) and 'question' in item:
-                    # Ensure 'answer' key exists, defaulting to None if not present
-                    test_questions_for_rag.append({'question': item['question'], 'answer': item.get('answer')})
-            print(f"Loaded test questions from config: {len(test_questions_for_rag)} questions")
-        else:
-            print(f"Warning: 'test_questions' format in file_types.yaml for {file_type_name} is not recognized or is empty. RAG QA will be skipped.")
+        qa_file_path = self._abs_path(qa_file_path)
+        print(f"Attempting to load QAs from file: {qa_file_path}")
+        # Use the RAG LLM handler to load QA pairs
+        # test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
+        test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 1) # test
+
 
         # 5. Answer the question with rag
+        rag_results = []
         for group in test_questions_for_rag:
             ans_qa = self.rag_handler.answer_question(
                 question_text=group['question'],
@@ -131,6 +123,7 @@ class ExperimentRunner:
                 qa_model_id='default_model',
                 reranker_method_name=reranker_method_name
             )
+            rag_results.append(ans_qa)
 
 
         # 6. Evaluate chunking using Evaluator
@@ -224,12 +217,13 @@ class ExperimentRunner:
         except IOError as e:
             print(f"Error saving summary CSV file {summary_filepath}: {e}")
 
-    def load_qa_pairs_from_file(self, file_path):
+    def load_qa_pairs_from_file(self, file_path, qa_nums=8):
         """
         Loads QA pairs from a specified text file.
         Each Q and A should be on separate lines, prefixed with "Q: " and "A: ".
         Args:
             file_path (str): The absolute path to the QA file.
+            qa_nums (int): The number of QA pairs to load.
         Returns:
             list: A list of dictionaries, where each dictionary is a QA pair {'question': str, 'answer': str}.
         """
@@ -259,6 +253,14 @@ class ExperimentRunner:
             print(f"No QA pairs loaded from {file_path}. Ensure format is 'Q: ...' and 'A: ...'")
         else:
             print(f"Loaded {len(qa_pairs)} QA pairs from {file_path}")
+
+        if len(qa_pairs) > qa_nums:
+            # random select qa_pairs
+            qa_pairs = random.sample(qa_pairs, qa_nums)
+            print(f"Selected {qa_nums} QA pairs from {file_path}")
+        else:
+            print(f"Selected all QA pairs from {file_path}")
+
         return qa_pairs
 
 
