@@ -88,7 +88,6 @@ def main():
         file_types_config_path='config/file_types.yaml',
         chunking_strategies_config_path='config/chunking_strategies.yaml',
         results_dir = args.results_dir,
-        eval_model_id = args.model_id,
         llm_config_path = 'config/llm_info.yaml'
     )
 

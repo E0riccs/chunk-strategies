@@ -15,7 +15,6 @@ class ExperimentRunner:
     def __init__(self, 
                  file_types_config_path='config/file_types.yaml',
                  chunking_strategies_config_path='config/chunking_strategies.yaml',
-                 eval_model_id = None,
                  results_dir='results',
                  llm_config_path='config/llm_info.yaml',
                  vector_store_base_persist_dir='db/chroma_db',
@@ -23,13 +22,15 @@ class ExperimentRunner:
                  ):
         
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.eval_model_id = eval_model_id
         
         self.file_handler = FileHandler(config_path=self._abs_path(file_types_config_path))
         self.chunker = Chunker(config_path=self._abs_path(chunking_strategies_config_path))
         self.rag_handler = RAGHandler(vector_store_base_persist_dir = vector_store_base_persist_dir)
 
+        # config
         self.experiments_config = {} # Initialize as empty dict, will be populated
+        self.llm_config = load_yaml_config(self._abs_path(llm_config_path))
+        self.text_config = load_yaml_config(self._abs_path(file_types_config_path))
         
         self.results_dir = self._abs_path(results_dir)
         if not os.path.exists(self.results_dir):
@@ -46,12 +47,7 @@ class ExperimentRunner:
         """Runs a single experiment for a given file type and chunking strategy."""
         # 0. config
         file_type_name = setting.get('file_type')
-        chunking_strategy_name = setting.get('chunking_strategy')
-
-        if_use_api_embedding = setting.get('use_api_embedding', True)
-        if if_use_api_embedding:
-            embedding_model_name = setting.get('embedding_model_name', 'default_embedding')
-            embedding_api_platform = setting.get('api_platform', 'siliconflow')
+        chunking_strategy_name = setting.get('chunking_strategy')        
 
         if_rerank = setting.get('rerank', False)
         if if_rerank:
@@ -60,7 +56,6 @@ class ExperimentRunner:
         print(f"\n--- Running Experiment ---")
         print(f"File Type: {file_type_name}")
         print(f"Chunking Strategy: {chunking_strategy_name}")
-        self.evaluator = Evaluator(model_id=self.eval_model_id, exp_setting=setting) 
 
         # 1. Load original text
         original_text = self.file_handler.load_test_data(file_type_name)
@@ -92,9 +87,9 @@ class ExperimentRunner:
         self.rag_handler._setup_vector_store(
             file_type_name=file_type_name,
             chunking_strategy_name=chunking_strategy_name,
-            use_api_embeddings=if_use_api_embedding,
-            embedding_model_name=embedding_model_name,
-            api_platform=embedding_api_platform
+            use_api_embeddings=self.use_api_embeddings,
+            embedding_model_name=self.embedding_model_name,
+            api_platform=self.embedding_api_platform
         )
         # self.rag_handler.add_documents_to_vector_store(
         #     chunks=chunks,
@@ -115,19 +110,19 @@ class ExperimentRunner:
         # 5. Answer the question with rag
         rag_results = []
         for group in test_questions_for_rag:
-            ans_qa = self.rag_handler.answer_question(
+            ans_rag = self.rag_handler.answer_question(
                 question_text=group['question'],
                 retrieval_n_results=10,
                 reranker_top_n=3,
                 # vector_store_filter=None,
-                qa_model_id='default_model',
-                reranker_method_name=reranker_method_name
+                qa_model_id=self.rag_model_id
             )
-            rag_results.append(ans_qa.final_answer)
+            rag_results.append(ans_rag)
 
 
         # 6. Evaluate chunking using Evaluator
         print("\n--- Evaluating Chunks --- ")
+        self.evaluator = Evaluator(model_id=self.eval_model_id, exp_setting=setting) 
         chunk_eval_metrics = self.evaluator.evaluate(original_text, chunks, chunking_duration)
         print("Chunk Evaluation Metrics (from Evaluator):")
         for key, value in chunk_eval_metrics.items():
@@ -170,10 +165,38 @@ class ExperimentRunner:
         """Runs all experiments defined in a configuration file."""
         abs_experiments_config_path = self._abs_path(experiments_config_path)
         self.experiments_config = load_yaml_config(abs_experiments_config_path)
-        
         if not self.experiments_config or 'experiments' not in self.experiments_config:
             print(f"Error: Experiments configuration file not found or invalid at {abs_experiments_config_path}")
             return
+
+        # the llm model used in all experiments
+        self.llm_list = {}
+        for model_dict in self.experiments_config.get('llm', []):
+            self.llm_list.update({k: v for k,v in model_dict.items()})
+
+        # embedding model detail
+        if 'embedding_model' in self.llm_list:
+            self.use_api_embeddings = True
+            self.embedding_model_name = self.llm_list.get('embedding_model')
+            for model_dicts in self.llm_config.get('embedding_models', []):
+                if model_dicts.get('model') == self.embedding_model_name:
+                    self.embedding_api_platform = model_dicts.get('platform')
+                    break
+
+        # rag model detail
+        self.rag_model_id = self.llm_list.get('rag_model')
+        for model_dicts in self.llm_config.get('llm_models', []):
+            if model_dicts.get('model') == self.rag_model_id:
+                self.rag_api_platform = model_dicts.get('platform')
+                break
+        
+        # eval model detail
+        self.eval_model_id = self.llm_list.get('eval_model')
+        for model_dicts in self.llm_config.get('llm_models', []):
+            if model_dicts.get('model') == self.eval_model_id:
+                self.eval_api_platform = model_dicts.get('platform')
+                break
+        
 
         print(f"\n=== Starting Batch of Experiments from {abs_experiments_config_path} ===")
         for exp_setting in self.experiments_config.get('experiments', []):

@@ -8,9 +8,8 @@ import os
 import re
 
 class Evaluator:
-    def __init__(self, model_id):
+    def __init__(self, model_id, exp_setting):
         self.llm_handler = LLM_handler(model_id=model_id)
-
     
     def _calculate_cosine_similarity(self, original_text, chunks):
         """Calculates the average cosine similarity between original text and its chunks."""
@@ -34,7 +33,7 @@ class Evaluator:
 
     def _get_llm_evaluation(self, original_text, chunks):
         """Gets evaluation score from an LLM (e.g., OpenAI GPT)."""
-        if not self.llm_client or not chunks:
+        if not self.llm_handler.api or not chunks:
             # print("LLM client not initialized or no chunks to evaluate. Skipping LLM evaluation.")
             return None # Or a default score like 0 or -1
 

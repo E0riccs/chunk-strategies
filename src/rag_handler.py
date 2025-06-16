@@ -197,7 +197,7 @@ class RAGHandler:
         # 3. Generate answer using LLM
         chat_llm_handler = LLM_handler(model_id = qa_model_id)
 
-        print(f"Generating answer using LLM (model: {qa_model_id}) with {reranked_documents_count} documents as context...")
+        print(f"Generating answer using LLM (model: {qa_model_id}) with {len(context_for_llm)} documents as context...")
         
         prompt_params = PromptKeywordsModel(
             question=question_text,
