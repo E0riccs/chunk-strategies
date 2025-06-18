@@ -11,22 +11,25 @@ class Evaluator:
     def __init__(self, model_id, exp_setting):
         self.llm_handler = LLM_handler(model_id=model_id)
     
-    def _calculate_cosine_similarity(self, original_text, chunks):
-        """Calculates the average cosine similarity between original text and its chunks."""
-        if not chunks:
+    def _calculate_cosine_similarity(self, text1_list, text2):
+        """Calculates the average cosine similarity between 2 texts."""
+
+        # merge text1_list into a single string
+        text1 = '\n'.join(text1_list)
+        if not text1_list or not text2:
             return 0.0
         
         vectorizer = TfidfVectorizer()
         try:
             # Ensure original_text is not empty and chunks are not all empty strings
-            if not original_text.strip() or all(not chunk.strip() for chunk in chunks):
+            if not text1.strip() or not text2.strip():
                 # print("Warning: Original text or all chunks are empty. Cosine similarity cannot be computed.")
                 return 0.0
 
-            tfidf_matrix = vectorizer.fit_transform([original_text] + chunks)
+            tfidf_matrix = vectorizer.fit_transform([text1, text2])
             cosine_similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
             return np.mean(cosine_similarities) if cosine_similarities.size > 0 else 0.0
-        except ValueError as e:
+        except ValueError:
             # This can happen if vocabulary is empty (e.g., all stop words or very short text)
             # print(f"Warning: Could not compute TF-IDF, possibly due to empty vocabulary: {e}. Returning 0 for cosine similarity.")
             return 0.0
@@ -83,15 +86,17 @@ Chunks (first 50 chars of each, up to 5 chunks):
             Calculates all evaluation metrics.
 
             Args:
-                gen_qas (list of dict): Generated QAs.
-                std_qas (list of dict): Standard QAs.
+                gen_qas (list of dict): Generated QAs with strict structure. (Key-Value)
+                std_qas (list of dict): Standard QAs with strict structure. (Key-Value)
             
             Returns:
                 metrics (dict): Evaluation metrics.
 
         """
-        avg_cosine_sim = self._calculate_cosine_similarity(std_qas, gen_qas)
-        llm_score = self._get_llm_evaluation(std_qas, gen_qas)
+        avg_cosine_sims, llm_scores= [], []
+        for i in range(len(std_qas)):
+            avg_cosine_sims.append(self._calculate_cosine_similarity(std_qas[i]['answer'], gen_qas[i]['final_answer']))
+            llm_scores.append(self._get_llm_evaluation(std_qas[i]['answer'], gen_qas[i]['final_answer']))
 
         metrics = {
             'total_processing_time_seconds': round(processing_time, 4),

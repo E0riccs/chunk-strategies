@@ -2,6 +2,7 @@ import os
 import time
 import datetime
 import yaml
+import re
 import pandas as pd
 import random
 
@@ -262,6 +263,18 @@ class ExperimentRunner:
                     current_q = line[3:].strip()
                 elif line.startswith("A:") and current_q:
                     answer = line[3:].strip()
+
+                    # Convert string representation of list to actual list
+                    if answer.startswith("[") and answer.endswith("]"):
+                        answer_text = answer[1:-1]
+                        
+                        # Find all quoted strings or items without quotes
+                        items = re.findall(r'\'([^\']*?)\'', answer_text)
+                        answer = items
+                    else:
+                        # If not in list format, treat as a single item
+                        answer = [answer]
+
                     qa_pairs.append({"question": current_q, "answer": answer})
                     current_q = None # Reset for the next pair
                 # Blank lines or other lines are ignored
