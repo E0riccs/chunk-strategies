@@ -139,7 +139,8 @@ class RAGHandler:
             reranker_method_name (str): The method name to be used by Reranker for reranking.
 
         Returns:
-            dict: A dictionary containing the final answer, context, and other details.
+            context_for_llm: The retrieved documents.
+            rag_answer: A dictionary containing the final answer, context, and other details.
         """
         if not question_text:
             print("Error: Question text cannot be empty.")
@@ -203,11 +204,11 @@ class RAGHandler:
             question=question_text,
             document=context_for_llm
         )
-        answer = chat_llm_handler.chat(task="RAGAnswer", **prompt_params.model_dump(exclude_none=True))
+        answer = chat_llm_handler.generate_rag_answer(**prompt_params.model_dump(exclude_none=True))
         print(f"Generated final answer: {answer[:100]}...")
 
         # 创建标准化的响应
-        return RagAnswerModel(
+        return context_for_llm,RagAnswerModel(
             final_answer=answer,
             retrieved_documents_count=len(retrieved_documents),
             reranked_documents_count=reranked_documents_count,

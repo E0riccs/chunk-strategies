@@ -29,5 +29,6 @@ class PromptKeywordsModel(BaseModel):
     """
     document: Optional[Union[str, List[str]]] = Field(None, description="Document content for context")
     question: Optional[str] = Field(None, description="Question to be answered")
+    
     std: Optional[str] = Field(None, description="Standard content for comparison")
     judge: Optional[str] = Field(None, description="Judge or evaluation criteria")

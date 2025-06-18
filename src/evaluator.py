@@ -2,14 +2,15 @@ import time
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+from src.llm_utils.llm_model import PromptKeywordsModel
 from src.llm_handler import LLM_handler
 
-import os
 import re
 
 class Evaluator:
     def __init__(self, model_id, exp_setting):
-        self.llm_handler = LLM_handler(model_id=model_id)
+        self.llm_model_id = model_id
     
     def _calculate_cosine_similarity(self, text1_list, text2):
         """Calculates the average cosine similarity between 2 texts."""
@@ -23,71 +24,40 @@ class Evaluator:
         try:
             # Ensure original_text is not empty and chunks are not all empty strings
             if not text1.strip() or not text2.strip():
-                # print("Warning: Original text or all chunks are empty. Cosine similarity cannot be computed.")
+                print("Warning: Original text or all chunks are empty. Cosine similarity cannot be computed.")
                 return 0.0
 
             tfidf_matrix = vectorizer.fit_transform([text1, text2])
             cosine_similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
             return np.mean(cosine_similarities) if cosine_similarities.size > 0 else 0.0
         except ValueError:
-            # This can happen if vocabulary is empty (e.g., all stop words or very short text)
-            # print(f"Warning: Could not compute TF-IDF, possibly due to empty vocabulary: {e}. Returning 0 for cosine similarity.")
+            print(f"Warning: Could not compute TF-IDF, possibly due to empty vocabulary: {e}. Returning 0 for cosine similarity.")
             return 0.0
 
-    def _get_llm_evaluation(self, original_text, chunks):
-        """Gets evaluation score from an LLM (e.g., OpenAI GPT)."""
-        if not self.llm_handler.api or not chunks:
-            # print("LLM client not initialized or no chunks to evaluate. Skipping LLM evaluation.")
-            return None # Or a default score like 0 or -1
+    def _get_llm_evaluation(self, question_text, std_answer, final_answer, documents):
+        """Gets evaluation score from an LLM."""
+        llm_handler = LLM_handler(model_id=self.llm_model_id)
 
-        # Prepare a prompt for the LLM
-        # This prompt needs to be carefully designed for the specific task
-        prompt_text = f"""Please evaluate the quality of the following text chunks based on the original text. 
-Consider coherence, completeness of information within chunks, and how well they represent the original content. 
-Rate on a scale of 1 to 5, where 1 is poor and 5 is excellent. 
-Provide only the numeric score (e.g., 4 or 3.5).
-
-Original Text (first 200 chars for context):
-{original_text[:200]}...
-
-Chunks (first 50 chars of each, up to 5 chunks):
-"""
-        for i, chunk in enumerate(chunks[:5]): # Limit to 5 chunks for brevity in prompt
-            prompt_text += f"{i+1}. {chunk[:50]}...\n"
-        if len(chunks) > 5:
-            prompt_text += "... (and more chunks)\n"
+        # Prompt
+        std_answer = '\n'.join(std_answer)
+        prompt_params = PromptKeywordsModel(
+            question=question_text,
+            document=documents,
+            std = std_answer,
+            judge = final_answer
+        )
+        judgement = llm_handler.generate_judgement(**prompt_params.model_dump(exclude_none=True))
         
-        prompt_text += "\nScore (1-5): "
+        return judgement['score'] # KEY defined in Prompt
 
-        try:
-            response = self.llm_client.chat.completions.create(
-                model=self.llm_model_name,
-                messages=[
-                    {"role": "system", "content": "You are an expert text chunking evaluator."},
-                    {"role": "user", "content": prompt_text}
-                ],
-                temperature=0.2, # Low temperature for more deterministic output
-                max_tokens=10 
-            )
-            content = response.choices[0].message.content.strip()
-            # Extract a number (integer or float) from the response
-            match = re.search(r"(\d+(\.\d+)?)", content)
-            if match:
-                return float(match.group(1))
-            else:
-                print(f"Warning: LLM did not return a parseable numeric score. Response: '{content}'")
-                return None
-        except Exception as e:
-            print(f"Error during LLM API call: {e}")
-            return None
-
-    def evaluate(self, gen_qas, std_qas):
+    def evaluate(self, gen_qas, std_qas, documents):
         """
             Calculates all evaluation metrics.
 
             Args:
                 gen_qas (list of dict): Generated QAs with strict structure. (Key-Value)
                 std_qas (list of dict): Standard QAs with strict structure. (Key-Value)
+                documents (list of dict): Documents retrieved from vector store.
             
             Returns:
                 metrics (dict): Evaluation metrics.
@@ -96,7 +66,7 @@ Chunks (first 50 chars of each, up to 5 chunks):
         avg_cosine_sims, llm_scores= [], []
         for i in range(len(std_qas)):
             avg_cosine_sims.append(self._calculate_cosine_similarity(std_qas[i]['answer'], gen_qas[i]['final_answer']))
-            llm_scores.append(self._get_llm_evaluation(std_qas[i]['answer'], gen_qas[i]['final_answer']))
+            llm_scores.append(self._get_llm_evaluation(std_qas[i]['question'],std_qas[i]['answer'], gen_qas[i]['final_answer'], documents[i]))
 
         metrics = {
             'total_processing_time_seconds': round(processing_time, 4),

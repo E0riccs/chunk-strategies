@@ -1,9 +1,8 @@
 import os
 
 from src.llm_utils.api_factory import APIFactory
-from src.llm_utils.qa import extract_qa_pairs
+from src.llm_utils.ans_tools import extract_qa_pairs, extract_score_res
 
-from src.llm_utils.llm_model import LLMResponseModel, PromptKeywordsModel
 
 class LLM_handler:
     def __init__(self, model_id, config_path="config"):
@@ -34,7 +33,7 @@ class LLM_handler:
                         if line.strip() == f"## {task}":
                             # 读取下一行，直到遇到新的标题
                             next_line = f.readline()
-                            while not next_line.startswith("##"):
+                            while not next_line.startswith("##") and next_line != "":
                                 prompt += next_line
                                 next_line = f.readline()
                             break
@@ -45,7 +44,7 @@ class LLM_handler:
         except Exception as e:
             print(f"Error loading prompt file: {e}")
 
-    def build_content(self, prompt, original_text = '', **kwargs):
+    def build_content(self, prompt, original_text = '', **kv_dict):
         '''
         根据原始提示词和附加信息，经过替换等操作得到最终的用户输入内容。
         替换形式：{key_word}
@@ -53,10 +52,10 @@ class LLM_handler:
         args:
             prompt (str): 原始提示词
             original_text (str): 原始文本, 直接添加到后部
-            **kwargs: 附加信息，变量名应该与提示词中的 {key_word} 一致
+            **kv_dict: 附加信息，变量名应该与提示词中的 {key_word} 一致
                      如果value是list类型，会自动转换为换行分隔的字符串
         '''
-        for key, value in kwargs.items():
+        for key, value in kv_dict.items():
             # 如果value是list类型，转换为换行分隔的字符串
             if isinstance(value, list):
                 value = '\n'.join(str(item) for item in value)
@@ -64,12 +63,33 @@ class LLM_handler:
 
         return prompt + '/n/n' + original_text
 
-    def _call_llm(self, user_content):
-        '''
-        调用 LLM 的接口，以json格式返回回答。
-        '''
-        response = self.api.send_message(user_content)
+    def _call_llm(self, input_text= '', task='Normal', **kwargs):
+        """
+        Answers a single question using a RAG pipeline: retrieve, rerank, then generate answer.
+
+        Args:
+            input_text (str): The input text to chat.
+            task (str): The task (RAGAnswer, GenQAs, etc.) of this chat.
+            **kwargs: Additional keyword arguments to pass to the build_content method.
+                      These will be validated using the PromptKeywords model.
+        """
+
+        prompt = self._load_prompt(task)
+        if not prompt:
+            print(f"Warning: Prompt for task '{task}' not found. Using a generic approach.")
+            prompt = " "
+
+        # Validate kwargs using Pydantic model
+        try:
+            user_content = self.build_content(prompt=prompt, original_text=input_text, **kwargs)
+        except Exception as e:
+            print(f"Warning: Invalid prompt keywords: {e}. Using raw kwargs.")
+        
+        raw_response = self.api.send_message(user_content)
+        response = self.api.answer_from_json(raw_response).ans_content
+
         return response
+
 
     def _generate_qa_pairs(self, original_text, output_file_path, build_strategy='skip'):
         """
@@ -82,21 +102,11 @@ class LLM_handler:
             original_text (str): 原始文本内容。
             output_file_path (str): 输出文件路径。
         """
-        print(f"Generating QA pairs for {output_file_path}...")
-        # 这里需要调用大模型（large）来生成QA对
-        # 假设 call_large_llm 是一个调用大模型的函数
-        
-        # json_schema = {
-        #     "score": "integer (0-100)",
-        #     "reason": "string (评分理由)",
-        #     "keywords": "array (提取的关键词)"
-        # }
-        prompt = self._load_prompt("GenQAs")
-        raw_ans = self._call_llm(self.build_content(prompt=prompt, original_text=original_text)) # 传递加载的prompt和原文
-        raw_ans = self.api.answer_from_json(raw_ans)
 
-        # 或者使用新的 Pydantic 模型字段名（推荐）
-        qa_pairs = extract_qa_pairs(raw_ans.ans_content)
+        # TODO: 已修改，未测试
+        print(f"Generating QA pairs for {output_file_path}...")
+        raw_ans = self._call_llm(original_text, task='GenQAs')
+        qa_pairs = extract_qa_pairs(raw_ans)
 
         try:
             if not qa_pairs:
@@ -147,31 +157,25 @@ class LLM_handler:
                         self._generate_qa_pairs(original_text, output_file_path, build_strategy)
                 except Exception as e:
                     print(f"Error processing file {filename}: {e}")
-        
-    def chat(self, input_text= '', task='Normal', **kwargs):
+
+    def generate_rag_answer(self, **kwargs):
         """
-        Answers a single question using a RAG pipeline: retrieve, rerank, then generate answer.
-
-        Args:
-            input_text (str): The input text to chat.
-            task (str): The task (RAGAnswer, GenQAs, etc.) of this chat.
-            **kwargs: Additional keyword arguments to pass to the build_content method.
-                      These will be validated using the PromptKeywords model.
+            llm 使用特定提示词进行 RAG 回答
         """
-
-        prompt = self._load_prompt(task)
-        if not prompt:
-            print(f"Warning: Prompt for task '{task}' not found. Using a generic approach.")
-            prompt = " "
-
-        # Validate kwargs using Pydantic model
-        try:
-            user_content = self.build_content(prompt=prompt, original_text=input_text, **kwargs)
-        except Exception as e:
-            print(f"Warning: Invalid prompt keywords: {e}. Using raw kwargs.")
-        
-        raw_response = self._call_llm(user_content)
-        response = self.api.answer_from_json(raw_response).ans_content
-
+        response = self._call_llm(task='RAGAnswer', **kwargs)
         return response
+        
+
+    def generate_judgement(self, **kwargs):
+        """
+            llm 对回答效果进行评价
+        """
+
+        # 确保生成的评价结果是有效的
+        while True:
+            response = self._call_llm(task='JudgeAs', **kwargs)
+            flag, score_dict = extract_score_res(response)
+            if flag:
+                break
+        return score_dict
 

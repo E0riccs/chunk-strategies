@@ -109,22 +109,24 @@ class ExperimentRunner:
 
 
         # 5. Answer the question with rag
+        related_documents = []
         rag_results = []
         for group in test_questions_for_rag:
-            ans_rag = self.rag_handler.answer_question(
+            doc, ans_rag = self.rag_handler.answer_question(
                 question_text=group['question'],
                 retrieval_n_results=10,
                 reranker_top_n=3,
                 # vector_store_filter=None,
                 qa_model_id=self.rag_model_id
             )
+            related_documents.append(doc)
             rag_results.append(ans_rag.model_dump())
 
 
         # 6. Evaluate chunking using Evaluator
         print("\n--- Evaluating Chunks --- ")
         self.evaluator = Evaluator(model_id=self.eval_model_id, exp_setting=setting) 
-        chunk_eval_metrics = self.evaluator.evaluate(rag_results, test_questions_for_rag)
+        chunk_eval_metrics = self.evaluator.evaluate(rag_results, test_questions_for_rag, related_documents)
         print("Chunk Evaluation Metrics (from Evaluator):")
         for key, value in chunk_eval_metrics.items():
             print(f"  {key}: {value}")
