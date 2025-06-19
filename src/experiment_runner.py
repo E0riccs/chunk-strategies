@@ -7,9 +7,11 @@ import pandas as pd
 import random
 
 from src.chunker import Chunker
-from src.evaluator import Evaluator
+from src.eval_utils.evaluator import Evaluator
 from src.file_handler import FileHandler
 from src.rag_handler import RAGHandler
+from src.eval_utils.eval_save import EvalSaver
+
 from src.utils import load_yaml_config
 
 class ExperimentRunner:
@@ -38,8 +40,6 @@ class ExperimentRunner:
             os.makedirs(self.results_dir)
             print(f"Created results directory: {self.results_dir}")
 
-        self.all_results_data = []
-
     def _abs_path(self, relative_path):
         """Converts a path relative to project root to an absolute path."""
         return os.path.join(self.base_dir, relative_path)
@@ -51,8 +51,13 @@ class ExperimentRunner:
         chunking_strategy_name = setting.get('chunking_strategy')        
 
         if_rerank = setting.get('rerank', False)
+        retrieval_n_results = setting.get('retrieval_n_results', 8)
         if if_rerank:
             reranker_method_name = setting.get('reranker_method', '')
+            reranker_top_n = setting.get('reranker_top_n', 4)
+        else:
+            reranker_method_name = 'Null'
+            reranker_top_n = 0
 
         print(f"\n--- Running Experiment ---")
         print(f"File Type: {file_type_name}")
@@ -104,8 +109,7 @@ class ExperimentRunner:
         qa_file_path = self._abs_path(qa_file_path)
         print(f"Attempting to load QAs from file: {qa_file_path}")
         # Use the RAG LLM handler to load QA pairs
-        # test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
-        test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 1) # test
+        test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 2) # test
 
 
         # 5. Answer the question with rag
@@ -114,8 +118,8 @@ class ExperimentRunner:
         for group in test_questions_for_rag:
             doc, ans_rag = self.rag_handler.answer_question(
                 question_text=group['question'],
-                retrieval_n_results=10,
-                reranker_top_n=3,
+                retrieval_n_results = retrieval_n_results,
+                reranker_top_n=reranker_top_n,
                 # vector_store_filter=None,
                 qa_model_id=self.rag_model_id
             )
@@ -127,42 +131,22 @@ class ExperimentRunner:
         print("\n--- Evaluating Chunks --- ")
         self.evaluator = Evaluator(model_id=self.eval_model_id, exp_setting=setting) 
         chunk_eval_metrics = self.evaluator.evaluate(rag_results, test_questions_for_rag, related_documents)
-        print("Chunk Evaluation Metrics (from Evaluator):")
-        for key, value in chunk_eval_metrics.items():
-            print(f"  {key}: {value}")
 
-        # Combine metrics
-        metrics = {
-            **chunk_eval_metrics, # Unpack metrics from Evaluator
-            # 'chunking_time_seconds': round(chunking_duration, 4), # This is already in chunk_eval_metrics as 'total_processing_time_seconds'
-            # 'number_of_chunks': len(chunks), # This is already in chunk_eval_metrics
-        }
-
-        # 6. Save results
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-
-        # Chunked output is now in the vector store, not saved as a separate text file.
-        # We can log the collection name or path if needed.
-        # chunks_filename = f"{safe_file_type_name}_{safe_strategy_name}_chunks.txt"
-        # chunks_filepath = os.path.join(self.results_dir, 'chunks', chunks_filename)
-        # save_text_to_file("\n\n---\n".join(chunks), chunks_filepath) # No longer saving chunks to text file
-
-        # Prepare data for overall results table
-        result_entry = {
-            'timestamp': timestamp,
+        # 7. save results
+        result_data_to_save = {
             'file_type_name': file_type_name,
-            'file_type_description': file_type_details.get('description', 'N/A'),
-            'test_file_path': file_type_details.get('test_file', 'N/A'),
             'chunking_strategy_name': chunking_strategy_name,
             'chunking_method': strategy_details.get('method', 'N/A'),
+            'chunk_size': strategy_details.get('params', {}).get('chunk_size'),
+            'chunk_overlap': strategy_details.get('params', {}).get('chunk_overlap'),
+            'chunk_times_s': chunking_duration,
+            'chunk_retrieval_nums': retrieval_n_results,
+            'reranker_model': reranker_method_name,
+            'reranker_nums': reranker_top_n,
+            'eval_metrics': chunk_eval_metrics,
             'chunking_params': str(strategy_details.get('params', {})),
-            'vector_store_collection': self.rag_handler.collection_name,
-            **metrics, # Unpack combined chunking metrics
-            'rag_qa_results': rag_results 
         }
-        self.all_results_data.append(result_entry)
-        print(f"Experiment completed for {file_type_name} with {chunking_strategy_name}.")
-        return result_entry
+        self.eval_saver.add_one_result(**result_data_to_save)
 
     def run_all_experiments_from_config(self, experiments_config_path='config/experiments_to_run.yaml'):
         """Runs all experiments defined in a configuration file."""
@@ -199,49 +183,15 @@ class ExperimentRunner:
             if model_dicts.get('model') == self.eval_model_id:
                 self.eval_api_platform = model_dicts.get('platform')
                 break
-        
+
+        # eval saver
+        self.eval_saver = EvalSaver(results_dir=self.results_dir, experiments_config=self.experiments_config)
 
         print(f"\n=== Starting Batch of Experiments from {abs_experiments_config_path} ===")
         for exp_setting in self.experiments_config.get('experiments', []):
             self.run_experiment(exp_setting)
         
-        self.save_all_results_summary()
         print("\n=== All Configured Experiments Completed ===")
-
-    def save_all_results_summary(self):
-        """Saves all accumulated experiment results to a CSV file."""
-        if not self.all_results_data:
-            print("No experiment results to save.")
-            return
-
-        df = pd.DataFrame(self.all_results_data)
-        
-        # Define a more flexible column order, or let pandas decide
-        # If 'columns_order' is in config, try to use it, but be robust if new columns exist
-        configured_cols_order = self.experiments_config.get('results', {}).get('columns_order', [])
-        if configured_cols_order:
-            # Create a list of columns present in the DataFrame, ordered by configured_cols_order
-            # then add any remaining columns from the DataFrame that were not in the config
-            final_cols = [col for col in configured_cols_order if col in df.columns]
-            remaining_cols = [col for col in df.columns if col not in final_cols]
-            df = df[final_cols + remaining_cols]
-        else:
-            # Default ordering if no config provided (pandas default or sort alphabetically)
-            df = df[sorted(df.columns)] # Example: sort alphabetically for consistency
-
-        # Handle complex columns like 'rag_qa_results' which is a list of dicts.
-        # Pandas will store it as a string representation of the list by default in CSV.
-        # For better analysis, one might flatten this or save it to a separate linked file.
-        # For now, we keep it as is for simplicity of this step.
-
-        summary_filename = f"summary/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        summary_filepath = os.path.join(self.results_dir, summary_filename)
-        
-        try:
-            df.to_csv(summary_filepath, index=False, encoding='utf-8')
-            print(f"\nSuccessfully saved experiment summary to: {summary_filepath}")
-        except IOError as e:
-            print(f"Error saving summary CSV file {summary_filepath}: {e}")
 
     def load_qa_pairs_from_file(self, file_path, qa_nums=8):
         """
@@ -300,71 +250,3 @@ class ExperimentRunner:
             print(f"Selected all QA pairs from {file_path}")
 
         return qa_pairs
-
-
-if __name__ == '__main__':
-    # IMPORTANT: Set your OPENAI_API_KEY environment variable for LLM evaluation
-    # export OPENAI_API_KEY='your_api_key_here'
-    # Or pass it directly: runner = ExperimentRunner(eval_model_id='your_chosen_llm_for_eval')
-    # Ensure OPENAI_API_KEY and COHERE_API_KEY are set in your environment if using them.
-
-    print("Initializing Experiment Runner...")
-    # Example: Specify a model for evaluation/QA if different from default
-    # runner = ExperimentRunner(eval_model_id='gpt-4-turbo-preview') 
-    runner = ExperimentRunner()
-    # You might also want to configure vector_store_persist_dir and collection_name_prefix here
-    # runner = ExperimentRunner(vector_store_persist_dir='custom_db_path', vector_store_collection_name_prefix='my_exp')
-
-    # --- Option 1: Run individual experiments --- 
-    # print("\n--- Running Single Experiment Example ---")
-    # runner.run_experiment(file_type_name='chapter_text', 
-    #                       chunking_strategy_name='simple_chunk_100_overlap_0')
-    # runner.run_experiment(file_type_name='itemized_text', 
-    #                       chunking_strategy_name='recursive_char_split_150_overlap_15')
-    # runner.save_all_results_summary() # Save summary after manual runs
-
-    # --- Option 2: Run experiments from a config file --- 
-    # First, create an example experiments_to_run.yaml in the config directory:
-    example_experiments_config = {
-        'experiments': [
-            {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_10'},
-            {'file_type': 'chapter_text', 'chunking_strategy': 'recursive_char_split_150_overlap_15'},
-            # {'file_type': 'itemized_text', 'chunking_strategy': 'simple_chunk_200_overlap_20'},
-            # {'file_type': 'short_plain_text', 'chunking_strategy': 'simple_chunk_100_overlap_0'}
-        ],
-        'rag_qa_model': 'gpt-3.5-turbo', # Specify the model for RAG question answering
-        'rag_eval_model': 'gpt-4',     # Specify the model for RAG evaluation
-        'results': {
-            'columns_order': [ # Example of preferred column order
-                'timestamp', 'file_type_name', 'chunking_strategy_name',
-                'number_of_chunks', 'chunking_time_seconds', 
-                'vector_store_collection', 'rag_qa_results' # rag_qa_results will be complex
-            ]
-        }
-    }
-    # Note: To run RAG QA, 'file_types.yaml' should have 'test_questions' for each file_type.
-    # Example for 'chapter_text' in 'file_types.yaml':
-    # chapter_text:
-    #   description: "A standard chapter from a book."
-    #   test_file: "data/chapter_example.txt"
-    #   test_questions: 
-    #     - "What is the main topic of this chapter?"
-    #     - { question: "Summarize the key arguments.", answer: "The key arguments are X, Y, and Z." } # Optional reference answer
-    config_dir = os.path.join(runner.base_dir, 'config')
-    if not os.path.exists(config_dir):
-        os.makedirs(config_dir)
-    experiments_yaml_path = os.path.join(config_dir, 'experiments_to_run.yaml')
-
-    try:
-        with open(experiments_yaml_path, 'w', encoding='utf-8') as f_yaml:
-            yaml.dump(example_experiments_config, f_yaml, default_flow_style=False, sort_keys=False)
-        print(f"Created example experiments config: {experiments_yaml_path}")
-    except Exception as e:
-        print(f"Error creating example experiments_to_run.yaml: {e}")
-
-    # Now run from this config file
-    print("\n--- Running Experiments from Config File --- ")
-    runner.run_all_experiments_from_config(experiments_config_path='config/experiments_to_run.yaml')
-
-    print("\nScript finished. Check the 'results' directory.")
-    print("Note: If LLM evaluation shows 'N/A' or errors, ensure OPENAI_API_KEY is correctly set.")

@@ -1,6 +1,6 @@
 """
-LLM API Response Model.
-This module defines the standardized response format for all LLM API platforms.
+LLM API response models which define the standardized response format for all LLM API platforms.
+Prompt replacement model which define the standard keywords that would be replaced in prompts.
 """
 from typing import Optional, Dict, Any, List, Union
 from pydantic import BaseModel, Field
