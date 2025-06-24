@@ -90,26 +90,26 @@ class ExperimentRunner:
 
         
         # 3. RAGHandler添加文档到向量数据库
-        self.rag_handler._setup_vector_store(
+        self.rag_handler.setup_vector_store(
             file_type_name=file_type_name,
             chunking_strategy_name=chunking_strategy_name,
             use_api_embeddings=self.use_api_embeddings,
             embedding_model_name=self.embedding_model_name,
             api_platform=self.embedding_api_platform
         )
-        # self.rag_handler.add_documents_to_vector_store(
-        #     chunks=chunks,
-        #     original_text_length=len(original_text)
-        # )
+        self.rag_handler.add_documents_to_vector_store(
+            chunks=chunks,
+            original_text_length=len(original_text)
+        )
 
         # 4. RAG QA and Evaluation
         # Load QAs from QA file
         qa_file_path = 'data/qa_pairs/' + self.file_handler.get_data_file_name(file_type_name) + '_qa_pairs.txt'
-        test_questions_for_rag = [] # List of dicts: {'question': ..., 'answer': ...}
         qa_file_path = self._abs_path(qa_file_path)
         print(f"Attempting to load QAs from file: {qa_file_path}")
         # Use the RAG LLM handler to load QA pairs
         test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 2) # test
+        # test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
 
 
         # 5. Answer the question with rag
@@ -187,7 +187,7 @@ class ExperimentRunner:
         # eval saver
         self.eval_saver = EvalSaver(results_dir=self.results_dir, experiments_config=self.experiments_config)
 
-        print(f"\n=== Starting Batch of Experiments from {abs_experiments_config_path} ===")
+        print(f"\n=== Starting Batch of {len(self.experiments_config.get('experiments', []))} Experiments from {abs_experiments_config_path} ===")
         for exp_setting in self.experiments_config.get('experiments', []):
             self.run_experiment(exp_setting)
         

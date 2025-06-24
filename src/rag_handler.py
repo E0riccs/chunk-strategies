@@ -28,11 +28,11 @@ class RAGHandler:
 
         # 向量数据库
         self.vector_store_base_persist_dir = vector_store_base_persist_dir
+        self.time_stamp = datetime.datetime.now()
 
-    def _setup_vector_store(self,
+    def setup_vector_store(self,
                             file_type_name: str,
                             chunking_strategy_name: str,
-                            vector_store_collection_name_prefix: str = "experiment",
                             use_api_embeddings: bool = False,
                             embedding_model_name: str = 'default_embedding',
                             api_platform: str = 'siliconflow') -> str:
@@ -62,7 +62,8 @@ class RAGHandler:
         collection_name_suffix = f"{safe_file_type_name}_{safe_strategy_name}"
         # 进一步清理collection_name_suffix，ChromaDB有限制
         collection_name_suffix = collection_name_suffix.replace('-', '_')  # 替换连字符
-        current_collection_name = f"{vector_store_collection_name_prefix}_{collection_name_suffix}"
+
+        current_collection_name = f"{collection_name_suffix}_{self.time_stamp}"
         
         # 确保collection名称对ChromaDB有效（例如，长度、字符）
         current_collection_name = current_collection_name[:60]  # collection名称最大长度为63
@@ -103,6 +104,11 @@ class RAGHandler:
         """
         if not self.vector_store_handler:
             raise ValueError("Vector store handler not initialized. Call _setup_vector_store first.")
+        
+        # 检查collection是否已有内容，如果有则跳过添加过程
+        if self.vector_store_handler.has_documents():
+            print(f"Collection '{self.collection_name}' already has {self.vector_store_handler.get_collection_count()} documents. Skipping document addition.")
+            return
             
         print(f"Adding {len(chunks)} chunks to vector store...")
         chunk_metadatas = [

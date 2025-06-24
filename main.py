@@ -49,7 +49,6 @@ def main():
     args = parser.parse_args()
 
     # 2. 针对原材料生成 QA 对s
-    # !!! 没有 model_id 参数呢？
     llmer_gen = LLM_handler(config_path= 'config', model_id = args.gen_qa_model_id)
 
     abs_default_llm_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LLM_CONFIG_PATH)

@@ -67,6 +67,8 @@ class Evaluator:
         metrics = []
         for i in range(len(std_qas)):
             cosine_sim = self._calculate_cosine_similarity(std_qas[i]['answer'], gen_qas[i]['final_answer'])
+
+            # 多线程
             llm_score = self._get_llm_evaluation(std_qas[i]['question'],std_qas[i]['answer'], gen_qas[i]['final_answer'], documents[i])
 
             metrics.append(EvalResponseModel(

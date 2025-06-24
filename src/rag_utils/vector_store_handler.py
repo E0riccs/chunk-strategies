@@ -1,4 +1,6 @@
 import os
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 
 import chromadb
 from chromadb.utils import embedding_functions
@@ -18,7 +20,8 @@ class VectorStoreHandler:
                  persist_directory="db/chroma_db", 
                  use_api_embeddings= True, 
                  embedding_model_name= None,
-                 api_platform = None):
+                 api_platform = None,
+                 max_parallel_threads=10):
         """
         Initializes the VectorStoreHandler.
 
@@ -28,12 +31,14 @@ class VectorStoreHandler:
             use_api_embeddings (bool): If True, uses API embeddings. Otherwise, uses SentenceTransformer.
             embedding_model_name (str): Name of the model for embeddings.(API)
             api_platform (str): API platform for embeddings.(API)
+            max_parallel_threads (int): Maximum number of parallel threads for embedding generation.
         """
         if not os.path.exists(persist_directory):
             os.makedirs(persist_directory)
             print(f"Created persistence directory: {persist_directory}")
 
         self.chroma_compatible_api = True
+        self.max_parallel_threads = max_parallel_threads
 
         self.client = chromadb.PersistentClient(path=persist_directory) # 持久化保存
         self.collection_name = collection_name
@@ -83,6 +88,19 @@ class VectorStoreHandler:
 
     def is_in_chroma_api_embeddings(self, platform_name:str):
         return platform_name in embedding_functions.known_embedding_functions
+
+    def _get_embedding_for_chunk(self, chunk):
+        """获取单个文本块的embedding
+        
+        Args:
+            chunk (str): 文本块内容
+                        
+        Returns:
+            list: 文本块的embedding向量
+        """
+        response = self.embedding_function.get_embedding(chunk)
+        response = self.embedding_function.embed_result_from_json(response)
+        return extract_embedding_from_json(response.response_content)
         
     def add_documents(self, chunks, metadatas=None, ids=None):
         """
@@ -115,11 +133,24 @@ class VectorStoreHandler:
                     ids=ids
                 )
             else:
-                embeddings = []
-                for chunk in chunks:
-                    response = self.embedding_function.get_embedding(chunk)
-                    response = self.embedding_function.embed_result_from_json(response)
-                    embeddings.append(extract_embedding_from_json(response.response_content))
+                # 使用ThreadPoolExecutor
+                max_workers = min(self.max_parallel_threads, len(chunks))
+                print(f"Embedding {len(chunks)} chunks using {max_workers} threads...")
+                
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    # 提交所有任务
+                    future_to_chunk = {executor.submit(self._get_embedding_for_chunk, chunk): i for i, chunk in enumerate(chunks)}
+                    
+                    # 处理完成的任务
+                    embeddings = [None] * len(chunks)
+                    for future in concurrent.futures.as_completed(future_to_chunk):
+                        chunk_idx = future_to_chunk[future]
+                        try:
+                            embedding = future.result()
+                            embeddings[chunk_idx] = embedding
+                        except Exception as e:
+                            print(f"处理文本块 {chunk_idx} 时出错: {e}")
+                
                 self.collection.upsert(
                     documents=chunks,
                     metadatas=metadatas,
@@ -176,6 +207,14 @@ class VectorStoreHandler:
     def get_collection_count(self):
         """Returns the number of documents in the collection."""
         return self.collection.count()
+        
+    def has_documents(self):
+        """Checks if the collection already has documents.
+        
+        Returns:
+            bool: True if the collection has documents, False otherwise.
+        """
+        return self.collection.count() > 0
 
     def clear_collection(self):
         """Deletes all documents from the current collection."""
