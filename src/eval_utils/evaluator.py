@@ -6,12 +6,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src.llm_utils.llm_model import PromptKeywordsModel
 from src.llm_handler import LLM_handler
 from src.eval_utils.eval_model import EvalResponseModel
+from src.logger import setup_logger
 
 import re
 
 class Evaluator:
     def __init__(self, model_id, exp_setting):
         self.llm_model_id = model_id
+        self.logger = setup_logger(__name__)
     
     def _calculate_cosine_similarity(self, text1_list, text2):
         """Calculates the average cosine similarity between 2 texts."""
@@ -25,14 +27,14 @@ class Evaluator:
         try:
             # Ensure original_text is not empty and chunks are not all empty strings
             if not text1.strip() or not text2.strip():
-                print("Warning: Original text or all chunks are empty. Cosine similarity cannot be computed.")
+                self.logger.warning("Original text or all chunks are empty. Cosine similarity cannot be computed.")
                 return 0.0
 
             tfidf_matrix = vectorizer.fit_transform([text1, text2])
             cosine_similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
             return np.mean(cosine_similarities) if cosine_similarities.size > 0 else 0.0
-        except ValueError:
-            print(f"Warning: Could not compute TF-IDF, possibly due to empty vocabulary: {e}. Returning 0 for cosine similarity.")
+        except ValueError as e:
+            self.logger.warning(f"Could not compute TF-IDF, possibly due to empty vocabulary: {e}. Returning 0 for cosine similarity.")
             return 0.0
 
     def _get_llm_evaluation(self, question_text, std_answer, final_answer, documents):

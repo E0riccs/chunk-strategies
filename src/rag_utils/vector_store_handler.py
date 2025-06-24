@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import chromadb
 from chromadb.utils import embedding_functions
 from src.rag_utils.embeddings import extract_embedding_from_json
+from src.logger import setup_logger
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -33,9 +34,10 @@ class VectorStoreHandler:
             api_platform (str): API platform for embeddings.(API)
             max_parallel_threads (int): Maximum number of parallel threads for embedding generation.
         """
+        self.logger = setup_logger(__name__)
         if not os.path.exists(persist_directory):
             os.makedirs(persist_directory)
-            print(f"Created persistence directory: {persist_directory}")
+            self.logger.info(f"Created persistence directory: {persist_directory}")
 
         self.chroma_compatible_api = True
         self.max_parallel_threads = max_parallel_threads
@@ -46,8 +48,10 @@ class VectorStoreHandler:
         if use_api_embeddings:
             # api embedding
             if not embedding_model_name:
+                self.logger.error("embedding_model_name must be specified when use_api_embeddings is True")
                 raise ValueError("embedding_model_name must be specified when use_api_embeddings is True")
             if not api_platform:
+                self.logger.error("api_platform must be specified when use_api_embeddings is True")
                 raise ValueError("api_platform must be specified when use_api_embeddings is True")
 
             if self.is_in_chroma_api_embeddings(api_platform):
@@ -60,7 +64,7 @@ class VectorStoreHandler:
                     name=self.collection_name,
                     embedding_function=self.embedding_function 
                 )# with embedding function
-                print(f"Using Api embeddings (chromadb compatible) bound with model: {self.embedding_model_name}")
+                self.logger.info(f"Using Api embeddings (chromadb compatible) bound with model: {self.embedding_model_name}")
             else:
                 self.chroma_compatible_api = False
                 self.embedding_function = APIFactory(model_id=embedding_model_name).create_api()
@@ -69,7 +73,7 @@ class VectorStoreHandler:
                 )# without embedding function
 
             self.embedding_model_name = embedding_model_name
-            print(f"Using Api embeddings with model: {self.embedding_model_name}")
+            self.logger.info(f"Using Api embeddings with model: {self.embedding_model_name}")
         else:
             # local embedding
             self.chroma_compatible_api = True
@@ -77,14 +81,14 @@ class VectorStoreHandler:
                 model_name='all-MiniLM-L6-v2'
             )
             self.embedding_model_name = 'SentenceTransformer-all-MiniLM-L6-v2'
-            print(f"Using embeddings with model: {self.embedding_model_name}")
+            self.logger.info(f"Using embeddings with model: {self.embedding_model_name}")
 
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 embedding_function=self.embedding_function
             )
 
-        print(f"Successfully connected to collection '{self.collection.name}' with {self.collection.count()} documents.")
+        self.logger.info(f"Successfully connected to collection '{self.collection.name}' with {self.collection.count()} documents.")
 
     def is_in_chroma_api_embeddings(self, platform_name:str):
         return platform_name in embedding_functions.known_embedding_functions
@@ -113,7 +117,7 @@ class VectorStoreHandler:
             embeddings (list of embeddings, optional): Embeddings for each document. If None, generated automatically.
         """
         if not chunks:
-            print("No chunks provided to add.")
+            self.logger.warning("No chunks provided to add.")
             return
 
         if not ids:
@@ -121,8 +125,10 @@ class VectorStoreHandler:
             ids = [f"doc_{start_id_num + i}" for i in range(len(chunks))]
         
         if metadatas and len(chunks) != len(metadatas):
+            self.logger.error("Number of chunks must match number of metadatas.")
             raise ValueError("Number of chunks must match number of metadatas.")
         if ids and len(chunks) != len(ids):
+            self.logger.error("Number of chunks must match number of ids.")
             raise ValueError("Number of chunks must match number of ids.")
 
         try:
@@ -135,7 +141,7 @@ class VectorStoreHandler:
             else:
                 # 使用ThreadPoolExecutor
                 max_workers = min(self.max_parallel_threads, len(chunks))
-                print(f"Embedding {len(chunks)} chunks using {max_workers} threads...")
+                self.logger.info(f"Embedding {len(chunks)} chunks using {max_workers} threads...")
                 
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     # 提交所有任务
@@ -149,7 +155,7 @@ class VectorStoreHandler:
                             embedding = future.result()
                             embeddings[chunk_idx] = embedding
                         except Exception as e:
-                            print(f"处理文本块 {chunk_idx} 时出错: {e}")
+                            self.logger.error(f"处理文本块 {chunk_idx} 时出错: {e}")
                 
                 self.collection.upsert(
                     documents=chunks,
@@ -157,9 +163,9 @@ class VectorStoreHandler:
                     embeddings= embeddings,
                     ids=ids
                 )
-            print(f"Added {len(chunks)} documents to collection '{self.collection.name}'. Total documents: {self.collection.count()}")
+            self.logger.info(f"Added {len(chunks)} documents to collection '{self.collection.name}'. Total documents: {self.collection.count()}")
         except Exception as e:
-            print(f"Error adding documents to ChromaDB: {e}")
+            self.logger.error(f"Error adding documents to ChromaDB: {e}")
             # Potentially log more details or re-raise specific exceptions
 
     def query_documents(self, query_text, n_results=5, where_filter=None, include=["metadatas", "documents", "distances"]):
@@ -179,7 +185,7 @@ class VectorStoreHandler:
                   Example structure for results['documents'][0], results['metadatas'][0] etc.
         """
         if not query_text:
-            print("Query text cannot be empty.")
+            self.logger.warning("Query text cannot be empty.")
             return {}
         
         try:
@@ -198,10 +204,10 @@ class VectorStoreHandler:
                     n_results=min(n_results, self.collection.count()),
                     include=include
                 )
-            print(f"Query returned {len(results.get('documents', [[]])[0])} results.")
+            self.logger.info(f"Query returned {len(results.get('documents', [[]])[0])} results.")
             return results
         except Exception as e:
-            print(f"Error querying documents from ChromaDB: {e}")
+            self.logger.error(f"Error querying documents from ChromaDB: {e}")
             return {}
 
     def get_collection_count(self):
@@ -218,16 +224,16 @@ class VectorStoreHandler:
 
     def clear_collection(self):
         """Deletes all documents from the current collection."""
-        print(f"Attempting to clear collection: {self.collection_name}")
+        self.logger.info(f"Attempting to clear collection: {self.collection_name}")
         # ChromaDB doesn't have a direct 'clear' for all items. 
         # We need to delete the collection and recreate it.
         self.client.delete_collection(name=self.collection_name)
-        print(f"Deleted collection: {self.collection_name}")
+        self.logger.info(f"Deleted collection: {self.collection_name}")
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             embedding_function=self.embedding_function
         )
-        print(f"Recreated collection: {self.collection.name}. Current count: {self.collection.count()}")
+        self.logger.info(f"Recreated collection: {self.collection.name}. Current count: {self.collection.count()}")
 
 # Example Usage (for testing purposes)
 if __name__ == '__main__':

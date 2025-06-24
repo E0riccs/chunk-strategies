@@ -9,3 +9,4 @@ data/qa_pairs/*
 **/__pycache__/*
 db/chroma_db/*
 src/rag_utils/api_factory.py
+logs/*

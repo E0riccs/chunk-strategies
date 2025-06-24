@@ -1,6 +1,7 @@
 import requests
 import json
 from ..rag_model import APIResponseModel
+from src.logger import setup_logger
 
 class SiliconflowAPI:
     def __init__(self, model_id, url, api_key, model_name, **kwargs):
@@ -9,6 +10,7 @@ class SiliconflowAPI:
         self.api_key = api_key
         self.model_name = model_name
         self.kwargs = kwargs
+        self.logger = setup_logger(__name__, if_console=False)
 
     def get_embedding(self, 
                 user_content):
@@ -27,7 +29,7 @@ class SiliconflowAPI:
         }
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
-        print("Embedding response with code: ", response.status_code)
+        self.logger.info(f"Embedding response with code: {response.status_code}")
 
         return response
 
@@ -66,7 +68,7 @@ class SiliconflowAPI:
         }
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
-        print("Rerank response with code: ", response.status_code)
+        self.logger.info(f"Rerank response with code: {response.status_code}")
 
         return response
 
@@ -82,7 +84,7 @@ class SiliconflowAPI:
         try:
             response_data = json.loads(json_response)
         except json.JSONDecodeError as e:
-            print(f"Error decoding JSON: {e}")
+            self.logger.error(f"Error decoding JSON: {e}")
             return None
 
         # Extract data safely using .get() method

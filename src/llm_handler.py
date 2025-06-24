@@ -2,10 +2,12 @@ import os
 
 from src.llm_utils.api_factory import APIFactory
 from src.llm_utils.ans_tools import extract_qa_pairs, extract_score_res
+from src.logger import setup_logger
 
 
 class LLM_handler:
     def __init__(self, model_id, config_path="config"):
+        self.logger = setup_logger(__name__)
         self.model_id = model_id
         self.config_file_path = config_path
 
@@ -40,9 +42,9 @@ class LLM_handler:
                 return prompt
                 
         except FileNotFoundError:
-            print(f"Warning: Prompt file not found at {prompt_file_path}")
+            self.logger.warning(f"Prompt file not found at {prompt_file_path}")
         except Exception as e:
-            print(f"Error loading prompt file: {e}")
+            self.logger.error(f"Error loading prompt file: {e}")
 
     def build_content(self, prompt, original_text = '', **kv_dict):
         '''
@@ -76,14 +78,14 @@ class LLM_handler:
 
         prompt = self._load_prompt(task)
         if not prompt:
-            print(f"Warning: Prompt for task '{task}' not found. Using a generic approach.")
+            self.logger.warning(f"Prompt for task '{task}' not found. Using a generic approach.")
             prompt = " "
 
         # Validate kwargs using Pydantic model
         try:
             user_content = self.build_content(prompt=prompt, original_text=input_text, **kwargs)
         except Exception as e:
-            print(f"Warning: Invalid prompt keywords: {e}. Using raw kwargs.")
+            self.logger.warning(f"Invalid prompt keywords: {e}. Using raw kwargs.")
         
         raw_response = self.api.send_message(user_content)
         response = self.api.answer_from_json(raw_response).ans_content
@@ -104,13 +106,13 @@ class LLM_handler:
         """
 
         # TODO: 已修改，未测试
-        print(f"Generating QA pairs for {output_file_path}...")
+        self.logger.info(f"Generating QA pairs for {output_file_path}...")
         raw_ans = self._call_llm(original_text, task='GenQAs')
         qa_pairs = extract_qa_pairs(raw_ans)
 
         try:
             if not qa_pairs:
-                print(f"No QA pairs generated for {output_file_path}.")
+                self.logger.warning(f"No QA pairs generated for {output_file_path}.")
                 return []
             
             # 追加策略
@@ -119,15 +121,15 @@ class LLM_handler:
                     existing_content = f.read()
                 existing_qa_pairs = extract_qa_pairs(existing_content)
                 qa_pairs.extend(existing_qa_pairs)
-                print(f"Appending QA pairs to {output_file_path}.")
+                self.logger.info(f"Appending QA pairs to {output_file_path}.")
 
             with open(output_file_path, 'w', encoding='utf-8') as f:
                 for qa in qa_pairs:
                     f.write(f"Q: {qa['question']}\n")
                     f.write(f"A: {qa['answers']}\n\n")
-            print(f"QA pairs saved to {output_file_path}")
+            self.logger.info(f"QA pairs saved to {output_file_path}")
         except Exception as e:
-            print(f"Error writing QA pairs to file {output_file_path}: {e}")
+            self.logger.error(f"Error writing QA pairs to file {output_file_path}: {e}")
         return qa_pairs
 
     def generate_qa_pairs(self, input_path='data', output_path='data/qa_pairs', build_strategy='skip'):
@@ -139,7 +141,7 @@ class LLM_handler:
             build_strategy (str): 生成QA对的策略，'rebuild'/'append'/'skip'。
         """
         os.makedirs(output_path, exist_ok=True)
-        print(f"Generating QA pairs from files in {input_path} to {output_path}")
+        self.logger.info(f"Generating QA pairs from files in {input_path} to {output_path}")
 
         for filename in os.listdir(input_path):
             file_path = os.path.join(input_path, filename)
@@ -148,7 +150,7 @@ class LLM_handler:
                 output_file_path = os.path.join(output_path, f"{file_name}_qa_pairs.txt")
 
                 if os.path.exists(output_file_path) and build_strategy == 'skip':
-                    print(f"QA pairs for {file_name} already exist at {output_file_path}. Skipping.")
+                    self.logger.info(f"QA pairs for {file_name} already exist at {output_file_path}. Skipping.")
                     continue
 
                 try:
@@ -156,7 +158,7 @@ class LLM_handler:
                         original_text = f.read()
                         self._generate_qa_pairs(original_text, output_file_path, build_strategy)
                 except Exception as e:
-                    print(f"Error processing file {filename}: {e}")
+                    self.logger.error(f"Error processing file {filename}: {e}")
 
     def generate_rag_answer(self, **kwargs):
         """

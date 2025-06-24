@@ -1,5 +1,6 @@
 import os
 from src.rag_utils.api_factory import APIFactory
+from src.logger import setup_logger
 
 class Reranker:
     def __init__(self, 
@@ -10,6 +11,7 @@ class Reranker:
         Args:
             reranker_model_name (str): The reranking model to use.
         """
+        self.logger = setup_logger(__name__)
         api_factory = APIFactory(config_path='config/llm_info.yaml', model_id=reranker_model_name, api_type='reranker')
         api = api_factory.create_api()
         
@@ -32,13 +34,14 @@ class Reranker:
                   Returns an empty list if an error occurs or no documents are provided.
         """
         if not documents:
-            print("No documents provided for reranking.")
+            self.logger.warning("No documents provided for reranking.")
             return []
         if not query:
-            print("No query provided for reranking. Returning original documents.")
+            self.logger.warning("No query provided for reranking. Returning original documents.")
             return documents # Or an empty list, depending on desired behavior
 
         try:
+            self.logger.info(f"Reranking {len(documents)} documents for query: '{query}'")
             rerank_results = self.api.rerank_documents(
                 query=query,
                 documents=documents,
@@ -50,14 +53,14 @@ class Reranker:
                 # Sort the original documents based on the reranked order
                 # The rerank_results.results are already sorted by relevance
                 reranked_docs_content = [documents[result.index] for result in rerank_results.results]
-                # print(f"Reranked {len(reranked_docs_content)} documents for query: '{query}'")
+                self.logger.info(f"Reranked {len(reranked_docs_content)} documents for query: '{query}'")
                 return reranked_docs_content
             else:
-                # print(f"Reranked {len(rerank_results.results)} document objects for query: '{query}'")
+                self.logger.info(f"Reranked {len(rerank_results.results)} document objects for query: '{query}'")
                 return rerank_results.results # Return the full result objects
             
         except Exception as e:
-            print(f"An unexpected error occurred during reranking: {e}")
+            self.logger.error(f"An unexpected error occurred during reranking: {e}")
             return []
 
 # Example Usage (for testing purposes)
@@ -67,7 +70,8 @@ if __name__ == '__main__':
     
     try:
         reranker = Reranker()
-        print("Reranker initialized successfully.")
+        logger = setup_logger(__name__)
+        logger.info("Reranker initialized successfully.")
 
         sample_query = "What are the benefits of eating apples?"
         sample_documents = [
@@ -78,56 +82,56 @@ if __name__ == '__main__':
             "An apple a day keeps the doctor away is a famous saying."
         ]
 
-        print(f"\nOriginal documents (count: {len(sample_documents)}):")
+        logger.info(f"\nOriginal documents (count: {len(sample_documents)}):")
         for i, doc in enumerate(sample_documents):
-            print(f"  {i+1}. {doc}")
+            logger.info(f"  {i+1}. {doc}")
 
         # Rerank and get top 3 document texts
-        print(f"\nReranking for query: '{sample_query}', top_n=3")
+        logger.info(f"\nReranking for query: '{sample_query}', top_n=3")
         top_3_reranked_docs = reranker.rerank_documents(sample_query, sample_documents, top_n=3)
         if top_3_reranked_docs:
-            print("Top 3 reranked documents:")
+            logger.info("Top 3 reranked documents:")
             for i, doc in enumerate(top_3_reranked_docs):
-                print(f"  {i+1}. {doc}")
+                logger.info(f"  {i+1}. {doc}")
         else:
-            print("Reranking returned no documents.")
+            logger.info("Reranking returned no documents.")
 
         # Rerank and get all document texts
-        print(f"\nReranking for query: '{sample_query}', all documents")
+        logger.info(f"\nReranking for query: '{sample_query}', all documents")
         all_reranked_docs = reranker.rerank_documents(sample_query, sample_documents)
         if all_reranked_docs:
-            print("All reranked documents:")
+            logger.info("All reranked documents:")
             for i, doc in enumerate(all_reranked_docs):
-                print(f"  {i+1}. {doc}")
+                logger.info(f"  {i+1}. {doc}")
         else:
-            print("Reranking returned no documents.")
+            logger.info("Reranking returned no documents.")
 
         # Rerank and get full result objects (including scores)
-        print(f"\nReranking for query: '{sample_query}', top_n=3, return full objects")
+        logger.info(f"\nReranking for query: '{sample_query}', top_n=3, return full objects")
         top_3_reranked_objects = reranker.rerank_documents(sample_query, sample_documents, top_n=3, return_documents=False)
         if top_3_reranked_objects:
-            print("Top 3 reranked result objects:")
+            logger.info("Top 3 reranked result objects:")
             for i, result in enumerate(top_3_reranked_objects):
-                print(f"  {i+1}. Index: {result.index}, Score: {result.relevance_score:.4f}")
+                logger.info(f"  {i+1}. Index: {result.index}, Score: {result.relevance_score:.4f}")
                 # Access original document text via index if needed: sample_documents[result.index]
-                print(f"     Document: {sample_documents[result.index]}")
+                logger.info(f"     Document: {sample_documents[result.index]}")
         else:
-            print("Reranking returned no result objects.")
+            logger.info("Reranking returned no result objects.")
             
         # Test with empty documents
-        print("\nTesting with empty documents list...")
+        logger.info("\nTesting with empty documents list...")
         empty_docs_result = reranker.rerank_documents(sample_query, [])
-        print(f"Result for empty documents: {empty_docs_result}")
+        logger.info(f"Result for empty documents: {empty_docs_result}")
 
         # Test with empty query
-        print("\nTesting with empty query...")
+        logger.info("\nTesting with empty query...")
         empty_query_result = reranker.rerank_documents("", sample_documents)
-        print(f"Result for empty query (should be original documents or empty based on implementation):")
+        logger.info(f"Result for empty query (should be original documents or empty based on implementation):")
         # for i, doc in enumerate(empty_query_result):
         #     print(f"  {i+1}. {doc}")
 
     except ValueError as e:
-        print(f"Error initializing Reranker: {e}")
-        print("Please ensure COHERE_API_KEY is set as an environment variable.")
+        logger.error(f"Error initializing Reranker: {e}")
+        logger.error("Please ensure COHERE_API_KEY is set as an environment variable.")
     except Exception as e:
-        print(f"An unexpected error occurred during Reranker example: {e}")
+        logger.error(f"An unexpected error occurred during Reranker example: {e}")

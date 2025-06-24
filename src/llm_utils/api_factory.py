@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, project_root)
 
 from src.llm_utils.apis import siliconflow
+from src.logger import setup_logger
 from src.utils import load_yaml_config
 
 class APIFactory:
@@ -24,10 +25,13 @@ class APIFactory:
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
         abs_config_path = os.path.join(project_root, config_path + '/llm_info.yaml')
 
+        self.logger = setup_logger(__name__)
+
         self.model_id = model_id
         self.config = load_yaml_config(abs_config_path)
         self.model_config = self._get_model_config(model_id)
         if not self.model_config:
+            self.logger.error(f"Model with id '{model_id}' not found in {abs_config_path}")
             raise ValueError(f"Model with id '{model_id}' not found in {abs_config_path}")
 
         self.url = self.model_config.get('end_point')
@@ -45,7 +49,8 @@ class APIFactory:
         if self.api_platform == 'siliconflow':
             return siliconflow.SiliconflowAPI(self.model_id, self.url, self.api_key, self.model_name, **kwargs)
         else:
-            raise ValueError(f"Unknown api_platform: {self.api_platform}")
+            self.logger.error(f"Unsupported LLM provider for model: {model_name}")
+            raise ValueError(f"Unsupported LLM provider for model: {model_name}")
 
 
 if __name__ == '__main__':

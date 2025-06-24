@@ -5,11 +5,14 @@ import pandas as pd
 import datetime
 import os
 
+from src.logger import setup_logger
+
 from src.eval_utils.eval_model import EvalResponseModel
 
 
 class EvalSaver:
     def __init__(self, results_dir: str, experiments_config: dict):
+        self.logger = setup_logger(__name__)
         self.results_dir = results_dir
         self.experiments_config = experiments_config
 
@@ -89,7 +92,7 @@ class EvalSaver:
 
         file_type_name = kwargs.get('file_type_name', 'Unknown File Type')
         chunking_strategy_name = kwargs.get('chunking_strategy_name', 'Unknown Strategy')
-        print(f"Saved result for {file_type_name} with {chunking_strategy_name} to {self.summary_filepath}")
+        self.logger.info(f"Saved result for {file_type_name} with {chunking_strategy_name} to {self.summary_filepath}")
 
 
         
@@ -101,7 +104,7 @@ class EvalSaver:
             如果 entry 包含更多的列，则这些额外列也会被保存。
         """
         if not entry:
-            print("No experiment result to save.")
+            self.logger.info("No experiment result to save.")
             return
 
         # 检查是否所有 configured_cols 在 entry 中都存在
@@ -133,5 +136,5 @@ class EvalSaver:
         try:
             df_to_save.to_csv(self.summary_filepath, index=False, encoding='utf-8-sig')
         except IOError as e:
-            print(f"Error saving summary CSV file {self.summary_filepath}: {e}")
+            self.logger.error(f"Error saving summary CSV file {self.summary_filepath}: {e}")
  

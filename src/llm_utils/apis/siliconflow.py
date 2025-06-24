@@ -1,5 +1,6 @@
 import requests
 import json
+from src.logger import setup_logger
 from ..llm_model import LLMResponseModel
 
 class SiliconflowAPI:
@@ -9,6 +10,7 @@ class SiliconflowAPI:
         self.api_key = api_key
         self.model_name = model_name
         self.kwargs = kwargs
+        self.logger = setup_logger(__name__)
 
     def send_message(self, 
                     user_content, 
@@ -56,8 +58,8 @@ class SiliconflowAPI:
         }
 
         response = requests.request("POST", self.url, json=payload, headers=headers)
-        print("Response with code: ", response.status_code)
-        # print("Response with content: ", response.text)
+        self.logger.info(f"Response with code: {response.status_code}")
+
         return response
 
 
@@ -70,7 +72,7 @@ class SiliconflowAPI:
         try:
             response_data = json.loads(json_response)
         except json.JSONDecodeError as e:
-            print(f"Error decoding JSON: {e}")
+            self.logger.error(f"Error decoding JSON: {e}")
             return None
 
         # Extract data safely using .get() method

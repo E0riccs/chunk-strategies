@@ -1,6 +1,7 @@
 from src.utils import load_yaml_config
 from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter
 import os
+from src.logger import setup_logger
 
 ok_method_name = ['simple_split', 'recursive_character_text_splitter']
 
@@ -40,6 +41,7 @@ class SpliterFactory:
 
 class Chunker:
     def __init__(self, config_path='config/chunking_strategies.yaml'):
+        self.logger = setup_logger(__name__)
         # Construct absolute path for config_path relative to project root
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         abs_config_path = os.path.join(self.base_dir, config_path)
@@ -58,7 +60,7 @@ class Chunker:
                 dic['params'] = strategy.get('params', {})
                 return dic
             
-        print(f"Error: Chunking strategy '{strategy_name}' not found in configuration.")
+        self.logger.error(f"Error: Chunking strategy '{strategy_name}' not found in configuration.")
         return None
 
     def chunk(self, text, strategy_name):
@@ -75,12 +77,13 @@ class Chunker:
         if method_name in ok_method_name:
             return spliter(text, **params)
         else:
-            print(f"Error: Unknown chunking method '{method_name}' for strategy '{strategy_name}'.")
+            self.logger.error(f"Error: Unknown chunking method '{method_name}' for strategy '{strategy_name}'.")
             return None
 
 if __name__ == '__main__':
     # Example usage
     # This assumes the script is run from the project root or PYTHONPATH is set correctly
+    logger = setup_logger(__name__)
     try:
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_script_dir)
@@ -89,26 +92,26 @@ if __name__ == '__main__':
         chunker = Chunker(config_path=config_file_path)
         sample_text = "This is a sample text for chunking.\nIt has multiple lines.\nAnd some more content to make it long enough for splitting. We need to see how different strategies work. This is the first paragraph.\n\nThis is the second paragraph. It also contains several sentences. The goal is to test the chunking mechanisms effectively."
 
-        print("\nTesting simple_chunk_100_overlap_0...")
+        logger.info("\nTesting simple_chunk_100_overlap_0...")
         chunks1 = chunker.chunk(sample_text, 'simple_chunk_100_overlap_0')
         if chunks1:
-            print(f"Strategy: simple_chunk_100_overlap_0, Chunks: {len(chunks1)}")
+            logger.info(f"Strategy: simple_chunk_100_overlap_0, Chunks: {len(chunks1)}")
             for i, chunk_text in enumerate(chunks1):
-                print(f"  Chunk {i+1}: '{chunk_text[:50]}...' (Length: {len(chunk_text)})")
+                logger.info(f"  Chunk {i+1}: '{chunk_text[:50]}...' (Length: {len(chunk_text)})")
         
-        print("\nTesting recursive_char_split_150_overlap_15...")
+        logger.info("\nTesting recursive_char_split_150_overlap_15...")
         chunks2 = chunker.chunk(sample_text, 'recursive_char_split_150_overlap_15')
         if chunks2:
-            print(f"Strategy: recursive_char_split_150_overlap_15, Chunks: {len(chunks2)}")
+            logger.info(f"Strategy: recursive_char_split_150_overlap_15, Chunks: {len(chunks2)}")
             for i, chunk_text in enumerate(chunks2):
-                print(f"  Chunk {i+1}: '{chunk_text[:50]}...' (Length: {len(chunk_text)})")
+                logger.info(f"  Chunk {i+1}: '{chunk_text[:50]}...' (Length: {len(chunk_text)})")
 
-        print("\nTesting non-existent strategy...")
+        logger.info("\nTesting non-existent strategy...")
         chunks_non_existent = chunker.chunk(sample_text, 'non_existent_strategy')
         if not chunks_non_existent:
-            print("Correctly handled non-existent strategy.")
+            logger.info("Correctly handled non-existent strategy.")
             
     except ValueError as e:
-        print(f"Initialization Error: {e}")
+        logger.error(f"Initialization Error: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}")

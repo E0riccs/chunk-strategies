@@ -2,6 +2,7 @@ import os
 import argparse
 from src.experiment_runner import ExperimentRunner
 from src.llm_handler import LLM_handler
+from src.logger import setup_logger
 
 DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
 DEFAULT_LLM_CONFIG_PATH = 'config/llm_info.yaml'
@@ -48,6 +49,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Setup logger
+    logger = setup_logger(__name__)
+
     # 2. 针对原材料生成 QA 对s
     llmer_gen = LLM_handler(config_path= 'config', model_id = args.gen_qa_model_id)
 
@@ -74,9 +78,9 @@ def main():
         try:
             with open(abs_default_llm_config_path, 'w', encoding='utf-8') as f_yaml:
                 yaml.dump(example_llm_config, f_yaml, default_flow_style=False, sort_keys=False)
-            print(f"Created default LLM config: {abs_default_llm_config_path}")
+            logger.info(f"Created default LLM config: {abs_default_llm_config_path}")
         except Exception as e:
-            print(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
+            logger.error(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
             return # Exit if cannot create default config
     
     llmer_gen.generate_qa_pairs(build_strategy=args.gen_qa)
@@ -91,10 +95,10 @@ def main():
     )
 
     if args.run_all_from_config:
-        print(f"Running all experiments from config file: {args.run_all_from_config}")
+        logger.info(f"Running all experiments from config file: {args.run_all_from_config}")
         runner.run_all_experiments_from_config(experiments_config_path=args.run_all_from_config)
     else:
-        print("No specific experiment requested. Using/Creating a default 'experiments_to_run.yaml' and running it.")
+        logger.info("No specific experiment requested. Using/Creating a default 'experiments_to_run.yaml' and running it.")
         
         # Create a default experiments_to_run.yaml if it doesn't exist and run it
         # This makes it easier for the user to get started if they run main.py without args
@@ -120,14 +124,14 @@ def main():
             try:
                 with open(abs_default_exp_config_path, 'w', encoding='utf-8') as f_yaml:
                     yaml.dump(example_experiments_config, f_yaml, default_flow_style=False, sort_keys=False)
-                print(f"Created default experiments config: {abs_default_exp_config_path}")
+                logger.info(f"Created default experiments config: {abs_default_exp_config_path}")
             except Exception as e:
-                print(f"Error creating default {DEFAULT_EXPERIMENTS_CONFIG_PATH}: {e}")
+                logger.error(f"Error creating default {DEFAULT_EXPERIMENTS_CONFIG_PATH}: {e}")
                 return # Exit if cannot create default config
         
         runner.run_all_experiments_from_config(experiments_config_path=DEFAULT_EXPERIMENTS_CONFIG_PATH)
 
-    print("\nMain script execution finished.")
+    logger.info("\nMain script execution finished.")
 
 if __name__ == "__main__":
     main()

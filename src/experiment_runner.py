@@ -13,6 +13,7 @@ from src.rag_handler import RAGHandler
 from src.eval_utils.eval_save import EvalSaver
 
 from src.utils import load_yaml_config
+from src.logger import setup_logger
 
 class ExperimentRunner:
     def __init__(self, 
@@ -23,6 +24,7 @@ class ExperimentRunner:
                  vector_store_base_persist_dir='db/chroma_db',
                  vector_store_collection_name_prefix='experiment'
                  ):
+        self.logger = setup_logger(__name__)
         
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
@@ -38,7 +40,7 @@ class ExperimentRunner:
         self.results_dir = self._abs_path(results_dir)
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)
-            print(f"Created results directory: {self.results_dir}")
+            self.logger.info(f"Created results directory: {self.results_dir}")
 
     def _abs_path(self, relative_path):
         """Converts a path relative to project root to an absolute path."""
@@ -59,21 +61,21 @@ class ExperimentRunner:
             reranker_method_name = 'Null'
             reranker_top_n = 0
 
-        print(f"\n--- Running Experiment ---")
-        print(f"File Type: {file_type_name}")
-        print(f"Chunking Strategy: {chunking_strategy_name}")
+        self.logger.info(f"\n--- Running Experiment ---")
+        self.logger.info(f"File Type: {file_type_name}")
+        self.logger.info(f"Chunking Strategy: {chunking_strategy_name}")
 
         # 1. Load original text
         original_text = self.file_handler.load_test_data(file_type_name)
         if original_text is None:
-            print(f"Failed to load data for {file_type_name}. Skipping experiment.")
+            self.logger.error(f"Failed to load data for {file_type_name}. Skipping experiment.")
             return None
         
         file_type_details = self.file_handler.get_file_type_details(file_type_name)
         strategy_details = self.chunker.get_strategy_details(chunking_strategy_name)
 
         if not file_type_details or not strategy_details:
-            print("Invalid file type or strategy name. Skipping experiment.")
+            self.logger.error("Invalid file type or strategy name. Skipping experiment.")
             return None
 
         # 2. Chunk the text
@@ -83,10 +85,10 @@ class ExperimentRunner:
         chunking_duration = end_chunk_time - start_chunk_time
 
         if chunks is None:
-            print(f"Failed to chunk text using {chunking_strategy_name}. Skipping experiment.")
+            self.logger.error(f"Failed to chunk text using {chunking_strategy_name}. Skipping experiment.")
             return None
         
-        print(f"Successfully chunked text into {len(chunks)} chunks in {chunking_duration:.4f}s.")
+        self.logger.info(f"Successfully chunked text into {len(chunks)} chunks in {chunking_duration:.4f}s.")
 
         
         # 3. RAGHandler添加文档到向量数据库
@@ -106,7 +108,7 @@ class ExperimentRunner:
         # Load QAs from QA file
         qa_file_path = 'data/qa_pairs/' + self.file_handler.get_data_file_name(file_type_name) + '_qa_pairs.txt'
         qa_file_path = self._abs_path(qa_file_path)
-        print(f"Attempting to load QAs from file: {qa_file_path}")
+        self.logger.info(f"Attempting to load QAs from file: {qa_file_path}")
         # Use the RAG LLM handler to load QA pairs
         test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 2) # test
         # test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
@@ -128,7 +130,7 @@ class ExperimentRunner:
 
 
         # 6. Evaluate chunking using Evaluator
-        print("\n--- Evaluating Chunks --- ")
+        self.logger.info("\n--- Evaluating Chunks --- ")
         self.evaluator = Evaluator(model_id=self.eval_model_id, exp_setting=setting) 
         chunk_eval_metrics = self.evaluator.evaluate(rag_results, test_questions_for_rag, related_documents)
 
@@ -153,7 +155,7 @@ class ExperimentRunner:
         abs_experiments_config_path = self._abs_path(experiments_config_path)
         self.experiments_config = load_yaml_config(abs_experiments_config_path)
         if not self.experiments_config or 'experiments' not in self.experiments_config:
-            print(f"Error: Experiments configuration file not found or invalid at {abs_experiments_config_path}")
+            self.logger.error(f"Error: Experiments configuration file not found or invalid at {abs_experiments_config_path}")
             return
 
         # the llm model used in all experiments
@@ -187,11 +189,11 @@ class ExperimentRunner:
         # eval saver
         self.eval_saver = EvalSaver(results_dir=self.results_dir, experiments_config=self.experiments_config)
 
-        print(f"\n=== Starting Batch of {len(self.experiments_config.get('experiments', []))} Experiments from {abs_experiments_config_path} ===")
+        self.logger.info(f"\n=== Starting Batch of {len(self.experiments_config.get('experiments', []))} Experiments from {abs_experiments_config_path} ===")
         for exp_setting in self.experiments_config.get('experiments', []):
             self.run_experiment(exp_setting)
         
-        print("\n=== All Configured Experiments Completed ===")
+        self.logger.info("\n=== All Configured Experiments Completed ===")
 
     def load_qa_pairs_from_file(self, file_path, qa_nums=8):
         """
@@ -231,22 +233,22 @@ class ExperimentRunner:
                     current_q = None # Reset for the next pair
                 # Blank lines or other lines are ignored
         except FileNotFoundError:
-            print(f"Error: QA file not found at {file_path}")
+            self.logger.error(f"Error: QA file not found at {file_path}")
             return []
         except Exception as e:
-            print(f"Error reading QA file {file_path}: {e}")
+            self.logger.error(f"Error reading QA file {file_path}: {e}")
             return []
         
         if not qa_pairs:
-            print(f"No QA pairs loaded from {file_path}. Ensure format is 'Q: ...' and 'A: ...'")
+            self.logger.warning(f"No QA pairs loaded from {file_path}. Ensure format is 'Q: ...' and 'A: ...'")
         else:
-            print(f"Loaded {len(qa_pairs)} QA pairs from {file_path}")
+            self.logger.info(f"Loaded {len(qa_pairs)} QA pairs from {file_path}")
 
         if len(qa_pairs) > qa_nums:
             # random select qa_pairs
             qa_pairs = random.sample(qa_pairs, qa_nums)
-            print(f"Selected {qa_nums} QA pairs from {file_path}")
+            self.logger.info(f"Selected {qa_nums} QA pairs from {file_path}")
         else:
-            print(f"Selected all QA pairs from {file_path}")
+            self.logger.info(f"Selected all QA pairs from {file_path}")
 
         return qa_pairs

@@ -3,6 +3,7 @@ import datetime
 import uuid
 
 from src.rag_utils.vector_store_handler import VectorStoreHandler
+from src.logger import setup_logger
 from src.rag_utils.reranker import Reranker
 from src.llm_handler import LLM_handler
 
@@ -25,6 +26,7 @@ class RAGHandler:
         Args:
             vector_store_base_persist_dir (str): 向量数据库基础持久化目录
         """
+        self.logger = setup_logger(__name__)
 
         # 向量数据库
         self.vector_store_base_persist_dir = vector_store_base_persist_dir
@@ -72,7 +74,7 @@ class RAGHandler:
              current_collection_name = 'c' + current_collection_name[1:-1] + 'c'  # 确保开始/结束是字母数字
 
         self.collection_name = current_collection_name
-        print(f"Initializing VectorStore for collection: {current_collection_name}")
+        self.logger.info(f"Initializing VectorStore for collection: {current_collection_name}")
     
         # 2. vector store handler
         self.vector_store_handler = VectorStoreHandler(
@@ -107,10 +109,10 @@ class RAGHandler:
         
         # 检查collection是否已有内容，如果有则跳过添加过程
         if self.vector_store_handler.has_documents():
-            print(f"Collection '{self.collection_name}' already has {self.vector_store_handler.get_collection_count()} documents. Skipping document addition.")
+            self.logger.info(f"Collection '{self.collection_name}' already has {self.vector_store_handler.get_collection_count()} documents. Skipping document addition.")
             return
             
-        print(f"Adding {len(chunks)} chunks to vector store...")
+        self.logger.info(f"Adding {len(chunks)} chunks to vector store...")
         chunk_metadatas = [
             {
                 "source_file_type": self.file_type_name,
@@ -123,7 +125,7 @@ class RAGHandler:
         # 为每个块生成唯一ID，确保它们可以被单独引用/更新
         chunk_ids = [f"{self.collection_name}_chunk_{uuid.uuid4()}" for _ in range(len(chunks))]
         self.vector_store_handler.add_documents(chunks, metadatas=chunk_metadatas, ids=chunk_ids)
-        print(f"Vector store now contains {self.vector_store_handler.get_collection_count()} documents.")
+        self.logger.info(f"Vector store now contains {self.vector_store_handler.get_collection_count()} documents.")
 
     def answer_question(self, 
                         question_text: str, 
@@ -149,7 +151,7 @@ class RAGHandler:
             rag_answer: A dictionary containing the final answer, context, and other details.
         """
         if not question_text:
-            print("Error: Question text cannot be empty.")
+            self.logger.error("Error: Question text cannot be empty.")
             return RagAnswerModel(
                 final_answer="Error: No question provided.",
                 retrieved_documents_count=0,
@@ -158,7 +160,7 @@ class RAGHandler:
             )
 
         # 1. Retrieve documents
-        print(f"Retrieving documents for question: '{question_text}'")
+        self.logger.info(f"Retrieving documents for question: '{question_text}'")
         retrieved_docs_result = self.vector_store_handler.query_documents(
             query_text=question_text,
             n_results=retrieval_n_results
@@ -181,7 +183,7 @@ class RAGHandler:
             self._setup_reranker(reranker_method_name)
             documents_count = 0
             if self.reranker and retrieved_documents:
-                print(f"Reranking {len(retrieved_documents)} documents...")
+                self.logger.info(f"Reranking {len(retrieved_documents)} documents...")
                 reranked_docs = self.reranker.rerank_documents(
                     query=question_text,
                     documents=retrieved_documents,
@@ -191,27 +193,27 @@ class RAGHandler:
             if reranked_docs:
                 context_for_llm = reranked_docs
                 reranked_documents_count = len(reranked_docs)
-                print(f"Reranked down to {documents_count} documents.")
+                self.logger.info(f"Reranked down to {documents_count} documents.")
             else:
                 context_for_llm = retrieved_documents
                 reranked_documents_count = len(context_for_llm)
-                print("Reranking did not return any documents. Using original retrieved documents.")
+                self.logger.warning("Reranking did not return any documents. Using original retrieved documents.")
         else:
             context_for_llm = retrieved_documents
             reranked_documents_count = 0
-            print("Reranker not available. Skipping reranking step.")
+            self.logger.info("Reranker not available. Skipping reranking step.")
         
         # 3. Generate answer using LLM
         chat_llm_handler = LLM_handler(model_id = qa_model_id)
 
-        print(f"Generating answer using LLM (model: {qa_model_id}) with {len(context_for_llm)} documents as context...")
+        self.logger.info(f"Generating answer using LLM (model: {qa_model_id}) with {len(context_for_llm)} documents as context...")
         
         prompt_params = PromptKeywordsModel(
             question=question_text,
             document=context_for_llm
         )
         answer = chat_llm_handler.generate_rag_answer(**prompt_params.model_dump(exclude_none=True))
-        print(f"Generated final answer: {answer[:100]}...")
+        self.logger.info(f"Generated final answer: {answer[:100]}...")
 
         # 创建标准化的响应
         return context_for_llm,RagAnswerModel(
