@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src.llm_utils.llm_model import PromptKeywordsModel
 from src.llm_handler import LLM_handler
 from src.eval_utils.eval_model import EvalResponseModel
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 import re
 

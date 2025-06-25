@@ -6,8 +6,8 @@ import sys
 sys.path.insert(0, project_root)
 
 from src.rag_utils.apis import siliconflow
-from src.utils import load_yaml_config
-from src.logger import setup_logger
+from src.utils.utils import load_yaml_config
+from src.utils.logger import setup_logger
 
 class APIFactory:
     def __init__(self, model_id, config_path='config/llm_info.yaml',api_type='embedding'):

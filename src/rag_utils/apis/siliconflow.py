@@ -1,7 +1,7 @@
 import requests
 import json
 from ..rag_model import APIResponseModel
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 class SiliconflowAPI:
     def __init__(self, model_id, url, api_key, model_name, **kwargs):

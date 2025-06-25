@@ -6,8 +6,8 @@ import sys
 sys.path.insert(0, project_root)
 
 from src.llm_utils.apis import siliconflow
-from src.logger import setup_logger
-from src.utils import load_yaml_config
+from src.utils.logger import setup_logger
+from src.utils.utils import load_yaml_config
 
 class APIFactory:
     def __init__(self, model_id, config_path='config'):

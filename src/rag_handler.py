@@ -3,7 +3,7 @@ import datetime
 import uuid
 
 from src.rag_utils.vector_store_handler import VectorStoreHandler
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 from src.rag_utils.reranker import Reranker
 from src.llm_handler import LLM_handler
 

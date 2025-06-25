@@ -1,14 +1,12 @@
-import os
 import argparse
 from src.experiment_runner import ExperimentRunner
 from src.llm_handler import LLM_handler
-from src.logger import setup_logger
-
-DEFAULT_EXPERIMENTS_CONFIG_PATH = 'config/experiments_to_run.yaml'
-DEFAULT_LLM_CONFIG_PATH = 'config/llm_info.yaml'
+from src.utils.logger import setup_logger
+from src.utils.init import initialize_project, DEFAULT_EXPERIMENTS_CONFIG_PATH
 
 def main():
     parser = argparse.ArgumentParser(description="Run text chunking experiments.")
+    logger = setup_logger(__name__)
 
     # 1. 读取参数
     parser.add_argument(
@@ -48,45 +46,19 @@ def main():
     )
 
     args = parser.parse_args()
-
-    # Setup logger
-    logger = setup_logger(__name__)
-
-    # 2. 针对原材料生成 QA 对s
+    
+    # 2. 初始化项目，创建必要的默认配置文件
+    if not initialize_project():
+        logger.error("Failed to initialize project.")
+        return
+        
+    # 3. 针对原材料生成 QA 对s
     llmer_gen = LLM_handler(config_path= 'config', model_id = args.gen_qa_model_id)
-
-    abs_default_llm_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LLM_CONFIG_PATH)
-
-    if not os.path.exists(abs_default_llm_config_path):
-        example_llm_config = {
-            'models':[
-                {
-                    'model': 'model_large',
-                    'model_name': 'gpt-3.5-turbo',
-                    'api_key': 'sk-0000000000000000000000',
-                    'end_pointy': 'https://api.openai.com/v1/chat/completions'
-                },
-                {
-                    'model': 'model_medium',
-                    'model_name': 'gpt-4o',
-                    'api_key': 'sk-0000000000000000000000',
-                    'end_pointy': 'https://api.openai.com/v1/chat/completions'
-                }
-            ]
-        }
-        import yaml
-        try:
-            with open(abs_default_llm_config_path, 'w', encoding='utf-8') as f_yaml:
-                yaml.dump(example_llm_config, f_yaml, default_flow_style=False, sort_keys=False)
-            logger.info(f"Created default LLM config: {abs_default_llm_config_path}")
-        except Exception as e:
-            logger.error(f"Error creating default {DEFAULT_LLM_CONFIG_PATH}: {e}")
-            return # Exit if cannot create default config
     
     llmer_gen.generate_qa_pairs(build_strategy=args.gen_qa)
     
 
-    # 3. 运行实验
+    # 4. 运行实验
     runner = ExperimentRunner(
         file_types_config_path='config/file_types.yaml',
         chunking_strategies_config_path='config/chunking_strategies.yaml',
@@ -98,37 +70,7 @@ def main():
         logger.info(f"Running all experiments from config file: {args.run_all_from_config}")
         runner.run_all_experiments_from_config(experiments_config_path=args.run_all_from_config)
     else:
-        logger.info("No specific experiment requested. Using/Creating a default 'experiments_to_run.yaml' and running it.")
-        
-        # Create a default experiments_to_run.yaml if it doesn't exist and run it
-        # This makes it easier for the user to get started if they run main.py without args
-        abs_default_exp_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_EXPERIMENTS_CONFIG_PATH)
-
-        if not os.path.exists(abs_default_exp_config_path):
-            example_experiments_config = {
-                'experiments': [
-                    {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_10'},
-                    {'file_type': 'itemized_text', 'chunking_strategy': 'recursive_char_split_150_overlap_15'},
-                ],
-                'results': {
-                    'columns_order': [
-                        'timestamp', 'file_type_name', 'chunking_strategy_name', 
-                        'total_processing_time_seconds', 'llm_evaluation_score_1_to_5', 
-                        'avg_cosine_similarity_chunks_vs_original', 'number_of_chunks',
-                        'chunking_method', 'chunking_params', 'file_type_description', 
-                        'test_file_path', 'chunks_output_file', 'evaluation_module_runtime_seconds'
-                    ]
-                }
-            }
-            import yaml
-            try:
-                with open(abs_default_exp_config_path, 'w', encoding='utf-8') as f_yaml:
-                    yaml.dump(example_experiments_config, f_yaml, default_flow_style=False, sort_keys=False)
-                logger.info(f"Created default experiments config: {abs_default_exp_config_path}")
-            except Exception as e:
-                logger.error(f"Error creating default {DEFAULT_EXPERIMENTS_CONFIG_PATH}: {e}")
-                return # Exit if cannot create default config
-        
+        logger.info("No specific experiment requested. Using default 'experiments_to_run.yaml' and running it.")
         runner.run_all_experiments_from_config(experiments_config_path=DEFAULT_EXPERIMENTS_CONFIG_PATH)
 
     logger.info("\nMain script execution finished.")

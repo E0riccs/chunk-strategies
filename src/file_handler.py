@@ -1,5 +1,5 @@
-from src.utils import load_yaml_config
-from src.logger import setup_logger
+from src.utils.utils import load_yaml_config
+from src.utils.logger import setup_logger
 import os
 
 class FileHandler:

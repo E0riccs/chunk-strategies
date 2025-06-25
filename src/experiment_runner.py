@@ -12,8 +12,8 @@ from src.file_handler import FileHandler
 from src.rag_handler import RAGHandler
 from src.eval_utils.eval_save import EvalSaver
 
-from src.utils import load_yaml_config
-from src.logger import setup_logger
+from src.utils.utils import load_yaml_config
+from src.utils.logger import setup_logger
 
 class ExperimentRunner:
     def __init__(self, 

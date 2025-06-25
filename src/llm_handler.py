@@ -2,7 +2,7 @@ import os
 
 from src.llm_utils.api_factory import APIFactory
 from src.llm_utils.ans_tools import extract_qa_pairs, extract_score_res
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 
 class LLM_handler:

@@ -1,6 +1,6 @@
 import os
 from src.rag_utils.api_factory import APIFactory
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 class Reranker:
     def __init__(self, 

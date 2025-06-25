@@ -1,6 +1,6 @@
 import requests
 import json
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 from ..llm_model import LLMResponseModel
 
 class SiliconflowAPI:

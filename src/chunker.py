@@ -1,7 +1,7 @@
-from src.utils import load_yaml_config
+from src.utils.utils import load_yaml_config
 from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter
 import os
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 ok_method_name = ['simple_split', 'recursive_character_text_splitter']
 

@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 import os
 
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 from src.eval_utils.eval_model import EvalResponseModel
 

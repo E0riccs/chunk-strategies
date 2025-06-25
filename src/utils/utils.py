@@ -1,5 +1,5 @@
 import yaml
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 def load_yaml_config(file_path):
     logger = setup_logger(__name__)

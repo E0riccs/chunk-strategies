@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import chromadb
 from chromadb.utils import embedding_functions
 from src.rag_utils.embeddings import extract_embedding_from_json
-from src.logger import setup_logger
+from src.utils.logger import setup_logger
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
