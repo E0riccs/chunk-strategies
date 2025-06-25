@@ -21,7 +21,7 @@ class FileHandler:
     def load_test_data(self, type_name):
         """
             Loads the test data content for a given file type name.
-            None/Empty file is allowed for existing chunking result evaluation.
+            None/Empty file is forbidden.
         """
         file_type_details = self.get_file_type_details(type_name)
         if file_type_details and 'test_file' in file_type_details:
@@ -49,8 +49,10 @@ class FileHandler:
         if file_type_details and 'test_file' in file_type_details:
             path = os.path.basename(file_type_details['test_file'])
             return os.path.splitext(path)[0]
+        elif file_type == 'out_file':
+            return 'out_file'
         else:
-            self.logger.error(f"Could not get data file name for file type '{file_type}'. Details missing or invalid.")
+            self.logger.log(f"Could not get data file name for file type '{file_type}'. Details missing or invalid.")
             return None
 
 if __name__ == '__main__':

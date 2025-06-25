@@ -11,5 +11,3 @@ file_types:
   - name: short_plain_text
     description: "Short, unstructured plain text. Example: a user query or a brief note."
     test_file: "data/plain_short.txt"
-  - name: out_file # special file type
-    description: "Unimported file, which need to load chunking results directly (rather than chunking by this project)."
