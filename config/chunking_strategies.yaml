@@ -15,3 +15,5 @@ chunking_strategies:
       chunk_size: 150
       chunk_overlap: 15
       separators: ["\n\n", "\n", " ", ""]
+  - name: embedding_chunk
+    method: outside # special method, load chunking results directly

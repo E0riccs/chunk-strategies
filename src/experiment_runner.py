@@ -67,7 +67,7 @@ class ExperimentRunner:
 
         # 1. Load original text
         original_text = self.file_handler.load_test_data(file_type_name)
-        if original_text is None:
+        if original_text is None and file_type_name != 'out_file':
             self.logger.error(f"Failed to load data for {file_type_name}. Skipping experiment.")
             return None
         

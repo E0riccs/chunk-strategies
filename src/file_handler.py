@@ -19,7 +19,10 @@ class FileHandler:
         return None
 
     def load_test_data(self, type_name):
-        """Loads the test data content for a given file type name."""
+        """
+            Loads the test data content for a given file type name.
+            None/Empty file is allowed for existing chunking result evaluation.
+        """
         file_type_details = self.get_file_type_details(type_name)
         if file_type_details and 'test_file' in file_type_details:
             # Construct absolute path for test_file
