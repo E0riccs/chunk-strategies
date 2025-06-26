@@ -1,4 +1,3 @@
-config/main_config.yaml
 results/chunks/*
 results/summary/*
 config/experiments_to_run.yaml

@@ -1,9 +1,6 @@
 import os
 import time
-import datetime
-import yaml
 import re
-import pandas as pd
 import random
 
 from src.chunker import Chunker
@@ -79,10 +76,7 @@ class ExperimentRunner:
             return None
 
         # 2. Chunk the text
-        start_chunk_time = time.time()
-        chunks = self.chunker.chunk(original_text, chunking_strategy_name)
-        end_chunk_time = time.time()
-        chunking_duration = end_chunk_time - start_chunk_time
+        chunking_duration, chunks = self.chunker.chunk(original_text, chunking_strategy_name)
 
         if chunks is None:
             self.logger.error(f"Failed to chunk text using {chunking_strategy_name}. Skipping experiment.")

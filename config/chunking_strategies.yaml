@@ -17,3 +17,5 @@ chunking_strategies:
       separators: ["\n\n", "\n", " ", ""]
   - name: embedding_chunk
     method: outside # special method, load chunking results directly
+    source_type: libsql
+    source_path: "data/load_chunks/JsBWMUpm3M4wx1qwCMuA5"

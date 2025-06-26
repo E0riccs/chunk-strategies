@@ -11,3 +11,7 @@ file_types:
   - name: short_plain_text
     description: "Short, unstructured plain text. Example: a user query or a brief note."
     test_file: "data/plain_short.txt"
+  - name: long_flat_book
+    description: "Long text with flat structure. Example: a novel or a textbook chapter."
+    test_file: "data/santi_1.txt"
+    

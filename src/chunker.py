@@ -1,11 +1,16 @@
+import os
+import time
+
+from src.utils.logger import setup_logger
 from src.utils.utils import load_yaml_config
 from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter
-import os
-from src.utils.logger import setup_logger
+from src.rag_utils.out_import import ChunkLoader
 
-ok_method_name = ['simple_split', 'recursive_character_text_splitter']
 
 class SpliterFactory:
+    def __init__(self):
+        self.logger = setup_logger(__name__)
+
     def _simple_split(self, text, chunk_size, chunk_overlap):
         """A basic character-based splitter."""
         splitter = CharacterTextSplitter(
@@ -32,17 +37,18 @@ class SpliterFactory:
         return splitter.split_text(text)
 
     def create_spliter(self, method_name):
-        if method_name not in ok_method_name:
-            raise ValueError(f"Invalid chunking method: {method_name}, please use one of {ok_method_name}")
         if method_name == 'simple_split':
             return self._simple_split
         elif method_name == 'recursive_character_text_splitter':
             return self._recursive_character_text_split
+        else:
+            self.logger.error(f"Chunking method: {method_name} is not supported.")
+            raise ValueError(f"Chunking method: {method_name} is not supported.")
 
 class Chunker:
     def __init__(self, config_path='config/chunking_strategies.yaml'):
         self.logger = setup_logger(__name__)
-        # Construct absolute path for config_path relative to project root
+
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         abs_config_path = os.path.join(self.base_dir, config_path)
         self.strategies_config = load_yaml_config(abs_config_path)
@@ -52,33 +58,71 @@ class Chunker:
         self.spliter_factory = SpliterFactory()
 
     def get_strategy_details(self, strategy_name):
-        dic = {}
         """Retrieves details for a given chunking strategy name."""
         for strategy in self.strategies_config.get('chunking_strategies', []):
             if strategy.get('name') == strategy_name:
-                dic['method'] = strategy.get('method')
-                dic['params'] = strategy.get('params', {})
-                return dic
+                return strategy
             
         self.logger.error(f"Error: Chunking strategy '{strategy_name}' not found in configuration.")
         return None
+        
+
+    def _chunk_load(self):
+        """
+            Load existing chunks from a source(different file type).
+            Args:
+                None
+            Return:
+                A tuple of (chunking_duration = 0, chunks(list)).
+        """
+
+        loader = ChunkLoader(self.strategy_details)
+        chunks = loader.load()
+
+        return 0, chunks
+
+    
+    def _chunk_split(self, text):
+        """
+            Split the given text into chunks using the specified strategy.
+            Args:
+                text: The text to be chunked.
+            Return:
+                A tuple of (chunking_duration, chunks(list)).
+        """
+        method_name = self.strategy_details.get('method')
+        params = self.strategy_details.get('params', {})
+        spliter = self.spliter_factory.create_spliter(method_name)
+        
+        start_time = time.time()
+        res = spliter(text, **params)
+        end_time = time.time()
+
+        return end_time - start_time, res
 
     def chunk(self, text, strategy_name):
-        """Chunks the given text using the specified strategy."""
-        strategy_details = self.get_strategy_details(strategy_name)
-        if not strategy_details:
+        """
+            Make chunk results(Split or Load).
+            Args:
+                text: The text to be chunked.
+                strategy_name: The name of the chunking strategy to use.
+            Return:
+                A tuple of (chunking_duration, chunks) from class method.
+        """
+        self.strategy_details = self.get_strategy_details(strategy_name)
+        if not self.strategy_details:
             return None
 
-        method_name = strategy_details.get('method')
-        params = strategy_details.get('params', {})
-
-        spliter = self.spliter_factory.create_spliter(method_name)
-
-        if method_name in ok_method_name:
-            return spliter(text, **params)
+        method_name = self.strategy_details.get('method')
+        if method_name == 'outside':
+            # outside source 必备参数
+            if self.strategy_details.get('source_type') is None:
+                self.logger.error(f"Chunking strategy '{strategy_name}' need more params.")
+                raise ValueError("Error: Chunking strategy '{strategy_name}' need more params.")
+            return self._chunk_load()
         else:
-            self.logger.error(f"Error: Unknown chunking method '{method_name}' for strategy '{strategy_name}'.")
-            return None
+            return self._chunk_split(text)
+            
 
 if __name__ == '__main__':
     # Example usage
