@@ -32,7 +32,7 @@ class SiliconflowAPI:
             "messages": [
                 {
                     "role": "user",
-                    "content": user_content
+                    "content": user_content[:max_tokens]
                 }
             ],
             "stream": stream,

@@ -29,6 +29,9 @@ class ExperimentRunner:
         self.chunker = Chunker(config_path=self._abs_path(chunking_strategies_config_path))
         self.rag_handler = RAGHandler(vector_store_base_persist_dir = vector_store_base_persist_dir)
 
+        # random seed
+        random.seed(time.time())
+
         # config
         self.experiments_config = {} # Initialize as empty dict, will be populated
         self.llm_config = load_yaml_config(self._abs_path(llm_config_path))
@@ -104,8 +107,8 @@ class ExperimentRunner:
         qa_file_path = self._abs_path(qa_file_path)
         self.logger.info(f"Attempting to load QAs from file: {qa_file_path}")
         # Use the RAG LLM handler to load QA pairs
-        test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 2) # test
-        # test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
+        # test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path, 2) # test
+        test_questions_for_rag = self.load_qa_pairs_from_file(qa_file_path)
 
 
         # 5. Answer the question with rag
