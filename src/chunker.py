@@ -115,7 +115,7 @@ class Chunker:
 
         method_name = self.strategy_details.get('method')
         if method_name == 'outside':
-            # outside source 必备参数
+            # outside 必备参数
             if self.strategy_details.get('source_type') is None:
                 self.logger.error(f"Chunking strategy '{strategy_name}' need more params.")
                 raise ValueError("Error: Chunking strategy '{strategy_name}' need more params.")
