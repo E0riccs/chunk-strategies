@@ -16,12 +16,16 @@ def create_default_llm_config(logger):
                 {
                     'model': 'custom_model_name1',
                     'model_name': 'gpt-3.5-turbo',
+                    'platform': 'openai',
+                    'description': 'free.',
                     'api_key': 'your_api_key_00000000000000',
                     'end_pointy': 'https://api.openai.com/v1/chat/completions'
                 },
                 {
                     'model': 'custom_model_name2',
-                    'model_name': 'gpt-4o',
+                    'model_name': 'openai',
+                    'platform': 'siliconflow',
+                    'description': 'not free. 1.89¥/1M tokens',
                     'api_key': 'your_api_key_00000000000000',
                     'end_pointy': 'https://api.openai.com/v1/chat/completions'
                 }
@@ -46,8 +50,16 @@ def create_default_experiments_config(logger):
     if not os.path.exists(exp_config_path):
         example_experiments_config = {
             'experiments': [
-                {'file_type': 'chapter_text', 'chunking_strategy': 'simple_chunk_100_overlap_10'},
-                {'file_type': 'itemized_text', 'chunking_strategy': 'recursive_char_split_150_overlap_15'},
+                {
+                    'file_type': 'chapter_text', 
+                    'chunking_strategy': 'simple_chunk_100_overlap_10',
+                    'rerank': False
+                },
+                {
+                    'file_type': 'itemized_text', 
+                    'chunking_strategy': 'recursive_char_split_150_overlap_15',
+                    'rerank': False
+                },
             ],
             'results': {
                 'columns_order': [
@@ -69,11 +81,31 @@ def create_default_experiments_config(logger):
             return False
     return True
 
+def check_required_configs(logger):
+    """
+    检查所有必需的配置文件是否存在
+    """
+    required_configs = [
+        'config/chunking_strategies.yaml',
+        'config/file_types.yaml',
+        'config/prompts.md'
+    ]
+    all_exist = True
+    for config_file in required_configs:
+        if not os.path.exists(config_file):
+            logger.error(f"Missing required config file: {config_file}")
+            all_exist = False
+    return all_exist
+
 def initialize_project():
     """
     初始化项目，创建必要的默认配置文件
     """
     logger = setup_logger(__name__)
+
+    # 检查必需的配置文件
+    if not check_required_configs(logger):
+        return False
     
     # 创建默认配置文件
     if not create_default_llm_config(logger):
