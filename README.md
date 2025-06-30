@@ -7,18 +7,20 @@ This project provides a framework to test and evaluate different text chunking s
 ```
 chunk-strategies/
 ├── config/                  # Configuration files
-│   ├── file_types.yaml      # Defines different types of input files and their test data
-│   ├── chunking_strategies.yaml # Defines various chunking methods and their parameters
-├── data/                    # Test data files
-│
+│   ├── *.yaml               # Defines the key parameters for experiments.
+│   └── prompts.md           # Contains prompts for the LLM
+├── data/                    # Test data files(Created/Loaded by yourself)
 ├── results/                 # Output directory for chunked texts and evaluation reports
 ├── src/                     # Source code
-│   ├── __init__.py
-│   ├── utils.py             # Utility functions (e.g., YAML loading)
-│   ├── file_handler.py      # Handles loading and managing file types and test data
 │   ├── chunker.py           # Implements different text chunking algorithms
-│   ├── evaluator.py         # Calculates evaluation metrics for chunking results
-│   └── experiment_runner.py # Orchestrates the experiment execution
+│   ├── experiment_runner.py # Orchestrates the experiment execution
+│   ├── file_handler.py      # Handles loading and managing file types and test data
+│   ├── llm_handler.py       # Handles interactions with the Large Language Model
+│   ├── rag_handler.py       # Handles RAG (Retrieval-Augmented Generation) processes
+│   ├── rag_utils/           # RAG utility functions
+│   ├── eval_utils/          # Evaluation utility functions
+│   ├── llm_utils/           # LLM utility functions
+│   └── utils/               # General utility functions
 ├── main.py                  # Main script to run experiments
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
