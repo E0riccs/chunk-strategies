@@ -54,15 +54,6 @@ chunk-strategies/
     pip install -r requirements.txt
     ```
 
-2.  **设置LLM API密钥（用于基于LLM的评估）**：
-    你可以将其设置为环境变量：
-    ```bash
-    export OPENAI_API_KEY="your_openai_api_key_here"
-    ```
-    或者在运行 `main.py` 时通过命令行参数传入（见下文）。
-    如果未提供API密钥，将跳过LLM评估。
-
-
 ## 快速开始
 **运行单个实验：**
 
@@ -72,7 +63,7 @@ chunk-strategies/
 python main.py --file_type chapter_text --strategy simple_chunk_100_overlap_10
 ```
 
-*批量运行实验：**
+**批量运行实验：**
 
 你可以在 `config/experiments_to_run.yaml` 文件中定义多个实验，他们将批量执行。
 
