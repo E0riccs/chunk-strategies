@@ -122,12 +122,12 @@ All custom behaviors should refer to existing implementations.
 3.  **Adding New LLM Models**:
     1. Define the API information for the new model in `config/llm_info.yaml`.
     2. If it's a new platform, depending on the intended use of the model:
-      1. Basic LLM use (dialogue):
-        *   Import the new API platform in `src/llm_utils/api_factory.py`.
-        *   Implement the API interface in `src/llm_utils/apis/YOUR_NEW_API_PLATFORM.py` according to the new platform's API specification, implementing `send_message` and `answer_from_json` methods and adhering to the response model.
-      2. Basic RAG use (Embedding):
-        *   Import the new API platform in `src/rag_utils/api_factory.py`.
-        *   Implement the API interface in `src/rag_utils/apis/YOUR_NEW_API_PLATFORM.py` according to the new platform's API specification, implementing `get_embedding` and `embed_result_from_json` methods and adhering to the response model.
+        1. Basic LLM use (dialogue):
+            *   Import the new API platform in `src/llm_utils/api_factory.py`.
+            *   Implement the API interface in `src/llm_utils/apis/YOUR_NEW_API_PLATFORM.py` according to the new platform's API specification, implementing communication method: `send_message`, and follow the response model to implement the information extraction method: `answer_from_json`.
+        2. Basic RAG use (Embedding):
+            *   Import the new API platform in `src/rag_utils/api_factory.py`.
+            *   Implement the API interface in `src/rag_utils/apis/YOUR_NEW_API_PLATFORM.py` according to the new platform's API specification, implementing communication method: `get_embedding`, and follow the response model to implement the information extraction method: `embed_result_from_json`.
 
 3.  **Modifying Evaluation**:
     *  You can introduce new evaluation criteria by modifying `src/eval_utils/evalutor.py` without changing the `config/experiments_to_run.yaml` file.

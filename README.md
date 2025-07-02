@@ -121,12 +121,12 @@ python main.py
 3.  **添加新 LLM 模型**：
     1. 在 `config/llm_info.yaml` 中定义新模型的 API 信息。
     2. 如果是新平台, 请根据新引入的模型用途：
-      1. LLM基本用途：对话
-        *   请在 `src/llm_utils/api_factory.py` 中引入新 API 平台；
-        *   请根据新平台的 API 规范，在 `src/llm_utils/apis/YOUR_NEW_API_PLATFORM.py` 中实现 API 接口，并实现 ``send_message``  和 ``answer_from_json`` 方法，并遵循响应模型。
-      2. RAG基本用途：Embedding
-        *   请在 `src/rag_utils/api_factory.py` 中引入新 API 平台；
-        *   请根据新平台的 API 规范，在 `src/rag_utils/apis/YOUR_NEW_API_PLATFORM.py` 中实现 API 接口，并实现 ``get_embedding`` 和 ``embed_result_from_json`` 方法，并遵循响应模型。
+        1. LLM基本用途：对话
+            *   请在 `src/llm_utils/api_factory.py` 中引入新 API 平台；
+            *   请根据新平台的 API 规范，在 `src/llm_utils/apis/YOUR_NEW_API_PLATFORM.py` 中实现 API 接口，并实现 ``send_message`` 通讯方法，并遵循响应模型实现``answer_from_json``信息提取方法。
+        2. RAG基本用途：Embedding
+            *   请在 `src/rag_utils/api_factory.py` 中引入新 API 平台；
+            *   请根据新平台的 API 规范，在 `src/rag_utils/apis/YOUR_NEW_API_PLATFORM.py` 中实现 API 接口，并实现 ``get_embedding`` 通讯方法，并遵循响应模型实现``embed_result_from_json`` 信息提取方法。
 
 3.  **修改评估**：
     *  通过修改 ``src/eval_utils/evalutor.py`` 可以引入新的评价标准，无需修改配置文件``config/experiments_to_run.yaml``
